@@ -3,8 +3,11 @@ package auto_pb
 import (
 	"fmt"
 	"reflect"
+	"sync/atomic"
 	"unsafe"
 )
+
+var checkPointers int32 = 1
 
 type LinearAllocator struct {
 	buffer   []byte
@@ -18,12 +21,15 @@ func NewLinearAllocator(cap int) *LinearAllocator {
 	return &LinearAllocator{
 		buffer:    make([]byte, 0, cap),
 		scanObjs:  make([]reflect.Value, 0, cap/8/4),
-		knownPtrs: make(map[uintptr]interface{}),
+		knownPtrs: make(map[uintptr]interface{}, cap/32),
 	}
 }
 
 func (ac *LinearAllocator) FreeAll() {
-	ac.CheckPointers()
+	if atomic.LoadInt32(&checkPointers) == 1 {
+		ac.checkPointers()
+	}
+
 	ac.buffer = ac.buffer[:0]
 	ac.scanObjs = ac.scanObjs[:0]
 	for k := range ac.knownPtrs {
@@ -59,7 +65,7 @@ func (ac *LinearAllocator) Alloc(tp reflect.Type) interface{} {
 	return r.Interface()
 }
 
-func (ac *LinearAllocator) CheckPointers() {
+func (ac *LinearAllocator) checkPointers() {
 	for _, ptr := range ac.scanObjs {
 		if err := ac.check(ptr); err != nil {
 			panic(err)

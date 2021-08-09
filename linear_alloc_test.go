@@ -71,7 +71,7 @@ func Test_Check(t *testing.T) {
 		d.v[i] = new(int)
 		*d.v[i] = i
 	}
-	ac.CheckPointers()
+	ac.checkPointers()
 }
 
 func Test_WorkWithGc(t *testing.T) {
