@@ -3,6 +3,7 @@ package auto_pb
 import (
 	"runtime"
 	"testing"
+	"unsafe"
 )
 
 // generated
@@ -35,7 +36,7 @@ func Test_LinearAlloc(t *testing.T) {
 	item.Class = ac.Int(3)
 	item.Name = ac.String("name")
 
-	d.Items = append(d.Items, item)
+	ac.Append(&d.Items, item)
 
 	if *d.Age != 11 {
 		t.Errorf("age")
@@ -51,8 +52,14 @@ func Test_LinearAlloc(t *testing.T) {
 	ac.FreeAll()
 }
 
-func Test_WorkWithGc(t *testing.T) {
+func Test_Check(t *testing.T) {
 	ac := NewLinearAllocator(100 * 1024)
+	defer func() {
+		if err := recover(); err == nil {
+			t.Errorf("faile to check")
+		}
+	}()
+
 	type D struct {
 		v [4]*int
 	}
@@ -63,7 +70,30 @@ func Test_WorkWithGc(t *testing.T) {
 	for i := 0; i < len(d.v); i++ {
 		d.v[i] = new(int)
 		*d.v[i] = i
+	}
+	ac.CheckPointers()
+}
+
+func Test_WorkWithGc(t *testing.T) {
+	type D struct {
+		v [10]*int
+	}
+
+	ac := NewLinearAllocator(int(unsafe.Sizeof(D{})))
+	defer ac.FreeAll()
+
+	var d *D
+	d = new(D)
+	ac.New(&d)
+
+	for i := 0; i < len(d.v); i++ {
+		d.v[i] = ac.Int(i)
+		//d.v[i] = new(int)
+		*d.v[i] = i
 		runtime.GC()
+	}
+	if ac.Miss != len(d.v) {
+		t.Errorf("member int must use buildin allocator")
 	}
 
 	for i, p := range d.v {
@@ -76,6 +106,7 @@ func Test_WorkWithGc(t *testing.T) {
 func Benchmark_linearAlloc(t *testing.B) {
 	t.ReportAllocs()
 	ac := NewLinearAllocator(100 * 1024)
+	defer ac.FreeAll()
 	t.ResetTimer()
 
 	for i := 0; i < t.N; i++ {
@@ -91,10 +122,8 @@ func Benchmark_linearAlloc(t *testing.B) {
 			item.Class = ac.Int(3)
 			item.Name = ac.String("name")
 
-			d.Items = append(d.Items, item)
+			ac.Append(&d.Items, item)
 		}
-
-		runtime.GC()
 
 		if *d.Age != 11 {
 			t.Errorf("age")
@@ -132,8 +161,6 @@ func Benchmark_buildInAlloc(t *testing.B) {
 			d.Items = append(d.Items, item)
 		}
 
-		runtime.GC()
-
 		if *d.Age != 11 {
 			t.Errorf("age")
 		}
@@ -143,7 +170,5 @@ func Benchmark_buildInAlloc(t *testing.B) {
 		if *d.Items[0].Id != 2 {
 			t.Errorf("item.id")
 		}
-
-		ac.FreeAll()
 	}
 }
