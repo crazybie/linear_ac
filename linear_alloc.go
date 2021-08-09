@@ -7,25 +7,25 @@ import (
 )
 
 type LinearAllocator struct {
-	mem        []byte
-	objHasPtrs []reflect.Value
-	// hold pointers in mem for gc.
+	buffer   []byte
+	scanObjs []reflect.Value
+	// prevent gc from collecting the objects referenced by pointers in buffer.
 	knownPtrs map[uintptr]interface{}
 	Miss      int
 }
 
 func NewLinearAllocator(cap int) *LinearAllocator {
 	return &LinearAllocator{
-		mem:        make([]byte, 0, cap),
-		objHasPtrs: make([]reflect.Value, 0, cap/8/4),
-		knownPtrs:  make(map[uintptr]interface{}),
+		buffer:    make([]byte, 0, cap),
+		scanObjs:  make([]reflect.Value, 0, cap/8/4),
+		knownPtrs: make(map[uintptr]interface{}),
 	}
 }
 
 func (ac *LinearAllocator) FreeAll() {
 	ac.CheckPointers()
-	ac.mem = ac.mem[:0]
-	ac.objHasPtrs = ac.objHasPtrs[:0]
+	ac.buffer = ac.buffer[:0]
+	ac.scanObjs = ac.scanObjs[:0]
 	for k := range ac.knownPtrs {
 		delete(ac.knownPtrs, k)
 	}
@@ -37,30 +37,30 @@ func (ac *LinearAllocator) New(ptrToPtr interface{}) {
 }
 
 func (ac *LinearAllocator) Alloc(tp reflect.Type) interface{} {
-	used, need := len(ac.mem), int(tp.Size())
-	if used+need > cap(ac.mem) {
+	used, need := len(ac.buffer), int(tp.Size())
+	if used+need > cap(ac.buffer) {
 		ac.Miss++
 		r := reflect.New(tp)
 		ac.knownPtrs[r.Elem().UnsafeAddr()] = r.Interface()
 		return r.Interface()
 	}
 
-	ac.mem = ac.mem[:used+need]
-	ptr := unsafe.Pointer(&ac.mem[used])
+	ac.buffer = ac.buffer[:used+need]
+	ptr := unsafe.Pointer(&ac.buffer[used])
 	for i := 0; i < need; i++ {
-		ac.mem[i+used] = 0
+		ac.buffer[i+used] = 0
 	}
 
 	r := reflect.NewAt(tp, ptr)
 	if tp.Kind() == reflect.Struct {
-		ac.objHasPtrs = append(ac.objHasPtrs, r)
+		ac.scanObjs = append(ac.scanObjs, r)
 	}
 	ac.knownPtrs[uintptr(ptr)] = r.Interface()
 	return r.Interface()
 }
 
 func (ac *LinearAllocator) CheckPointers() {
-	for _, ptr := range ac.objHasPtrs {
+	for _, ptr := range ac.scanObjs {
 		if err := ac.check(ptr); err != nil {
 			panic(err)
 		}
