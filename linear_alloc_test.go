@@ -36,7 +36,7 @@ func Test_LinearAlloc(t *testing.T) {
 		item.Class = ac.Int(3 + i)
 		item.Name = ac.String("name")
 
-		ac.Append(&d.Items, item)
+		ac.SliceAppend(&d.Items, item)
 	}
 
 	if *d.Age != 11 {
@@ -113,13 +113,13 @@ func Test_WorkWithGc(t *testing.T) {
 
 func Benchmark_linearAlloc(t *testing.B) {
 	t.ReportAllocs()
-	dbgCheckPointers = 0
-	dbgAllowExternalPointers = 0
+	DbgCheckPointers = 0
+	DbgAllowExternalPointers = 0
 	ac := NewLinearAllocator(500 * 1024)
 	defer func() {
 		ac.FreeAll()
-		dbgCheckPointers = 1
-		dbgAllowExternalPointers = 1
+		DbgCheckPointers = 1
+		DbgAllowExternalPointers = 1
 	}()
 	t.StartTimer()
 
@@ -136,7 +136,7 @@ func Benchmark_linearAlloc(t *testing.B) {
 			item.Class = ac.Int(3 + j)
 			item.Name = ac.String("name")
 
-			ac.Append(&d.Items, item)
+			ac.SliceAppend(&d.Items, item)
 		}
 
 		if *d.Age != 11 {
