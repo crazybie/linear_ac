@@ -145,8 +145,10 @@ func Benchmark_linearAlloc(t *testing.B) {
 		if len(d.Items) != 1000 {
 			t.Errorf("item")
 		}
-		if *d.Items[0].Id != 2 {
-			t.Errorf("item.id")
+		for j := 0; j < 1000; j++ {
+			if *d.Items[j].Id != 2+j {
+				t.Errorf("item.id")
+			}
 		}
 
 		ac.FreeAll()
@@ -188,8 +190,10 @@ func Benchmark_buildInAlloc(t *testing.B) {
 		if len(d.Items) != 1000 {
 			t.Errorf("item")
 		}
-		if *d.Items[0].Id != 2 {
-			t.Errorf("item.id")
+		for j := 0; j < 1000; j++ {
+			if *d.Items[j].Id != 2+j {
+				t.Errorf("item.id")
+			}
 		}
 		preventFromGc = append(preventFromGc, d)
 	}
