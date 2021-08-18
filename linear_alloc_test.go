@@ -1,4 +1,4 @@
-package auto_pb
+package linear_ac
 
 import (
 	"runtime"
@@ -6,7 +6,6 @@ import (
 	"unsafe"
 )
 
-// generated
 type PbItem struct {
 	Id     *int
 	Price  *int
@@ -15,7 +14,6 @@ type PbItem struct {
 	Active *bool
 }
 
-// generated
 type PbData struct {
 	Age   *int
 	Items []*PbItem
@@ -28,27 +26,37 @@ func Test_LinearAlloc(t *testing.T) {
 	ac.New(&d)
 	d.Age = ac.Int(11)
 
-	var item *PbItem
-	ac.New(&item)
-	item.Id = ac.Int(2)
-	item.Active = ac.Bool(true)
-	item.Price = ac.Int(100)
-	item.Class = ac.Int(3)
-	item.Name = ac.String("name")
+	n := 3
+	for i := 0; i < n; i++ {
+		var item *PbItem
+		ac.New(&item)
+		item.Id = ac.Int(i + 1)
+		item.Active = ac.Bool(true)
+		item.Price = ac.Int(100 + i)
+		item.Class = ac.Int(3 + i)
+		item.Name = ac.String("name")
 
-	ac.Append(&d.Items, item)
+		ac.Append(&d.Items, item)
+	}
 
 	if *d.Age != 11 {
 		t.Errorf("age")
 	}
 
-	if len(d.Items) != 1 {
+	if len(d.Items) != n {
 		t.Errorf("item")
 	}
-	if *d.Items[0].Id != 2 {
-		t.Errorf("item.id")
+	for i := 0; i < n; i++ {
+		if *d.Items[i].Id != i+1 {
+			t.Errorf("item.id")
+		}
+		if *d.Items[i].Price != i+100 {
+			t.Errorf("item.price")
+		}
+		if *d.Items[i].Class != i+3 {
+			t.Errorf("item.class")
+		}
 	}
-
 	ac.FreeAll()
 }
 
@@ -105,21 +113,27 @@ func Test_WorkWithGc(t *testing.T) {
 
 func Benchmark_linearAlloc(t *testing.B) {
 	t.ReportAllocs()
-	ac := NewLinearAllocator(100 * 1024)
-	defer ac.FreeAll()
-	t.ResetTimer()
+	dbgCheckPointers = 0
+	dbgAllowExternalPointers = 0
+	ac := NewLinearAllocator(500 * 1024)
+	defer func() {
+		ac.FreeAll()
+		dbgCheckPointers = 1
+		dbgAllowExternalPointers = 1
+	}()
+	t.StartTimer()
 
 	for i := 0; i < t.N; i++ {
 		var d *PbData
 		ac.New(&d)
 		d.Age = ac.Int(11)
 
-		for j := 0; j < 100; j++ {
+		for j := 0; j < 1000; j++ {
 			var item *PbItem
 			ac.New(&item)
-			item.Id = ac.Int(2)
-			item.Price = ac.Int(100)
-			item.Class = ac.Int(3)
+			item.Id = ac.Int(2 + j)
+			item.Price = ac.Int(100 + j)
+			item.Class = ac.Int(3 + j)
 			item.Name = ac.String("name")
 
 			ac.Append(&d.Items, item)
@@ -128,7 +142,7 @@ func Benchmark_linearAlloc(t *testing.B) {
 		if *d.Age != 11 {
 			t.Errorf("age")
 		}
-		if len(d.Items) != 100 {
+		if len(d.Items) != 1000 {
 			t.Errorf("item")
 		}
 		if *d.Items[0].Id != 2 {
@@ -137,26 +151,33 @@ func Benchmark_linearAlloc(t *testing.B) {
 
 		ac.FreeAll()
 	}
+	t.StopTimer()
+	if ac.Miss > 0 {
+		t.Fail()
+	}
 }
 
 func Benchmark_buildInAlloc(t *testing.B) {
 	t.ReportAllocs()
-	ac := NewLinearAllocator(0)
-	t.ResetTimer()
 
+	newInt := func(v int) *int { return &v }
+	newStr := func(v string) *string { return &v }
+	newBool := func(v bool) *bool { return &v }
+	preventFromGc := make([]*PbData, 0, t.N)
+
+	t.StartTimer()
 	for i := 0; i < t.N; i++ {
-		var d *PbData
-		ac.New(&d)
-		d.Age = ac.Int(11)
+		var d *PbData = new(PbData)
+		d.Age = newInt(11)
 
-		for j := 0; j < 100; j++ {
+		for j := 0; j < 1000; j++ {
 
-			var item *PbItem
-			ac.New(&item)
-			item.Id = ac.Int(2)
-			item.Price = ac.Int(100)
-			item.Class = ac.Int(3)
-			item.Name = ac.String("name")
+			var item *PbItem = new(PbItem)
+			item.Id = newInt(2 + j)
+			item.Price = newInt(100 + j)
+			item.Class = newInt(3 + j)
+			item.Name = newStr("name")
+			item.Active = newBool(true)
 
 			d.Items = append(d.Items, item)
 		}
@@ -164,11 +185,16 @@ func Benchmark_buildInAlloc(t *testing.B) {
 		if *d.Age != 11 {
 			t.Errorf("age")
 		}
-		if len(d.Items) != 100 {
+		if len(d.Items) != 1000 {
 			t.Errorf("item")
 		}
 		if *d.Items[0].Id != 2 {
 			t.Errorf("item.id")
 		}
+		preventFromGc = append(preventFromGc, d)
+	}
+	t.StopTimer()
+	if len(preventFromGc) != t.N {
+		t.Fail()
 	}
 }
