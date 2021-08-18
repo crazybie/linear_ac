@@ -7,6 +7,51 @@ import (
 	"unsafe"
 )
 
+///////////////////////////////////////////////////////////////////
+// NOTE:
+// The following structs must be matched with
+// the version from your golang runtime.
+///////////////////////////////////////////////////////////////////
+
+/// MatchWithGolangRuntime Start
+
+type sliceHeader struct {
+	Data unsafe.Pointer
+	Len  int
+	Cap  int
+}
+
+type rtype struct {
+	size       uintptr
+	ptrdata    uintptr
+	hash       uint32
+	tflag      uint8
+	align      uint8
+	fieldAlign uint8
+	kind       uint8
+	equal      func(unsafe.Pointer, unsafe.Pointer) bool
+	gcdata     *byte
+	str        int32
+	ptrToThis  int32
+}
+
+type emptyInterface struct {
+	typ  *rtype
+	data unsafe.Pointer
+}
+
+type sliceType struct {
+	rtype
+	elem *rtype
+}
+
+type ptrType struct {
+	rtype
+	elem *rtype
+}
+
+/// MatchWithGolangRuntime End
+
 var dbgCheckPointers int32 = 1
 var dbgAllowExternalPointers int32 = 1
 
@@ -85,41 +130,6 @@ func (ac *LinearAllocator) typedAlloc(tp reflect.Type) (ret interface{}) {
 		ac.knownPtrs[uintptr(ptr)] = ret
 	}
 	return
-}
-
-type sliceHeader struct {
-	Data unsafe.Pointer
-	Len  int
-	Cap  int
-}
-
-type rtype struct {
-	size       uintptr
-	ptrdata    uintptr
-	hash       uint32
-	tflag      uint8
-	align      uint8
-	fieldAlign uint8
-	kind       uint8
-	equal      func(unsafe.Pointer, unsafe.Pointer) bool
-	gcdata     *byte
-	str        int32
-	ptrToThis  int32
-}
-
-type emptyInterface struct {
-	typ  *rtype
-	data unsafe.Pointer
-}
-
-type sliceType struct {
-	rtype
-	elem *rtype
-}
-
-type ptrType struct {
-	rtype
-	elem *rtype
 }
 
 func (ac *LinearAllocator) Append(slicePtr interface{}, elem interface{}) {
