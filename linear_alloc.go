@@ -119,14 +119,16 @@ func (ac *LinearAllocator) Reset() {
 }
 
 func (ac *LinearAllocator) New(ptrToPtr interface{}) {
-	var temp interface{}
 	// cheat the escape analyser
-	copyBytes(unsafe.Pointer(&ptrToPtr), unsafe.Pointer(&temp), int(uintptrSize))
+	var temp interface{}
+	ifaceAddr := (uintptr)(unsafe.Pointer(&ptrToPtr))
+	dstEface := (*emptyInterface)(unsafe.Pointer(ifaceAddr))
+	*(*emptyInterface)(unsafe.Pointer(&temp)) = *dstEface
+
 	tp := reflect.TypeOf(temp).Elem().Elem()
 	v := ac.TypedNew(tp)
 	srcEface := (*emptyInterface)(unsafe.Pointer(&v))
-	dstEface := (*emptyInterface)(unsafe.Pointer(&ptrToPtr))
-	*(**uintptr)(dstEface.data) = (*uintptr)(srcEface.data)
+	*(*uintptr)(dstEface.data) = (uintptr)(srcEface.data)
 }
 
 func copyBytes(src, dst unsafe.Pointer, len int) {
