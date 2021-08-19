@@ -101,7 +101,7 @@ func NewLinearAllocator() (ret *LinearAllocator) {
 	return
 }
 
-func (ac *LinearAllocator) FreeAll() {
+func (ac *LinearAllocator) Reset() {
 	if ac.enablePointerChecking {
 		ac.checkPointers()
 		for k := range ac.knownPointers {

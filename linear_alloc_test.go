@@ -57,7 +57,7 @@ func Test_LinearAlloc(t *testing.T) {
 			t.Errorf("item.class")
 		}
 	}
-	ac.FreeAll()
+	ac.Reset()
 }
 
 func Test_Check(t *testing.T) {
@@ -88,7 +88,7 @@ func Test_WorkWithGc(t *testing.T) {
 	}
 
 	ac := NewLinearAllocator()
-	defer ac.FreeAll()
+	defer ac.Reset()
 
 	var d *D
 	ac.New(&d)
@@ -109,7 +109,7 @@ func Test_WorkWithGc(t *testing.T) {
 
 func Test_String(t *testing.T) {
 	ac := NewLinearAllocator()
-	defer ac.FreeAll()
+	defer ac.Reset()
 
 	type D struct {
 		s [5]*string
@@ -132,7 +132,7 @@ func Benchmark_linearAlloc(t *testing.B) {
 	DbgCheckPointers = 0
 	ac := NewLinearAllocator()
 	defer func() {
-		ac.FreeAll()
+		ac.Reset()
 		DbgCheckPointers = 1
 	}()
 	t.StartTimer()
@@ -166,7 +166,7 @@ func Benchmark_linearAlloc(t *testing.B) {
 			}
 		}
 
-		ac.FreeAll()
+		ac.Reset()
 	}
 	t.StopTimer()
 }
