@@ -66,6 +66,8 @@ var (
 )
 
 var (
+	uintptrSize = unsafe.Sizeof(uintptr(0))
+
 	boolType  = reflect.TypeOf(true)
 	intType   = reflect.TypeOf(0)
 	int32Type = reflect.TypeOf(int32(0))
@@ -117,15 +119,20 @@ func (ac *LinearAllocator) Reset() {
 }
 
 func (ac *LinearAllocator) New(ptrToPtr interface{}) {
-	tp := reflect.TypeOf(ptrToPtr).Elem().Elem()
-	reflect.ValueOf(ptrToPtr).Elem().Set(reflect.ValueOf(ac.typedAlloc(tp)))
+	var ptr interface{}
+	// cheat the escape analyser
+	copyBytes(unsafe.Pointer(&ptrToPtr), unsafe.Pointer(&ptr), int(uintptrSize))
+	tp := reflect.TypeOf(ptr).Elem().Elem()
+	v := ac.TypedNew(tp)
+	srcEface := (*emptyInterface)(unsafe.Pointer(&v))
+	dstEface := (*emptyInterface)(unsafe.Pointer(&ptrToPtr))
+	*(**uintptr)(dstEface.data) = (*uintptr)(srcEface.data)
 }
 
 func copyBytes(src, dst unsafe.Pointer, len int) {
-	align := unsafe.Sizeof(uintptr(0))
-	alignedEnd := uintptr(len) / align * align
+	alignedEnd := uintptr(len) / uintptrSize * uintptrSize
 	i := uintptr(0)
-	for ; i < alignedEnd; i += align {
+	for ; i < alignedEnd; i += uintptrSize {
 		*(*uintptr)(unsafe.Pointer(uintptr(dst) + i)) = *(*uintptr)(unsafe.Pointer(uintptr(src) + i))
 	}
 	for ; i < uintptr(len); i++ {
@@ -164,7 +171,7 @@ start:
 	return ptr
 }
 
-func (ac *LinearAllocator) typedAlloc(tp reflect.Type) (ret interface{}) {
+func (ac *LinearAllocator) TypedNew(tp reflect.Type) (ret interface{}) {
 	ptr := ac.alloc(int(tp.Size()))
 	r := reflect.NewAt(tp, ptr)
 	ret = r.Interface()
@@ -287,43 +294,43 @@ func (ac *LinearAllocator) checkRecursively(pe reflect.Value) error {
 }
 
 func (ac *LinearAllocator) Bool(v bool) (r *bool) {
-	r = ac.typedAlloc(boolType).(*bool)
+	r = ac.TypedNew(boolType).(*bool)
 	*r = v
 	return
 }
 
 func (ac *LinearAllocator) Int(v int) (r *int) {
-	r = ac.typedAlloc(intType).(*int)
+	r = ac.TypedNew(intType).(*int)
 	*r = v
 	return
 }
 
 func (ac *LinearAllocator) Int32(v int32) (r *int32) {
-	r = ac.typedAlloc(int32Type).(*int32)
+	r = ac.TypedNew(int32Type).(*int32)
 	*r = v
 	return
 }
 
 func (ac *LinearAllocator) Int64(v int64) (r *int64) {
-	r = ac.typedAlloc(int64Type).(*int64)
+	r = ac.TypedNew(int64Type).(*int64)
 	*r = v
 	return
 }
 
 func (ac *LinearAllocator) Float32(v float32) (r *float32) {
-	r = ac.typedAlloc(f32Type).(*float32)
+	r = ac.TypedNew(f32Type).(*float32)
 	*r = v
 	return
 }
 
 func (ac *LinearAllocator) Float64(v float64) (r *float64) {
-	r = ac.typedAlloc(f64Type).(*float64)
+	r = ac.TypedNew(f64Type).(*float64)
 	*r = v
 	return
 }
 
 func (ac *LinearAllocator) String(v string) (r *string) {
-	r = ac.typedAlloc(strType).(*string)
+	r = ac.TypedNew(strType).(*string)
 	*r = ac.NewString(v)
 	return
 }

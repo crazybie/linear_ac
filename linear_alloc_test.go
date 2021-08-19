@@ -72,7 +72,6 @@ func Test_Check(t *testing.T) {
 		v [4]*int
 	}
 	var d *D
-	d = new(D)
 	ac.New(&d)
 
 	for i := 0; i < len(d.v); i++ {
