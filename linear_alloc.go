@@ -61,29 +61,38 @@ type ptrType struct {
 // DbgCheckPointers checks if user allocates from build-in allocator.
 var DbgCheckPointers int32 = 1
 
-type buffer []byte
+var (
+	boolType  = reflect.TypeOf(true)
+	intType   = reflect.TypeOf(0)
+	int32Type = reflect.TypeOf(int32(0))
+	int64Type = reflect.TypeOf(int64(0))
+	f32Type   = reflect.TypeOf(float32(0))
+	f64Type   = reflect.TypeOf(float64(0))
+	strType   = reflect.TypeOf("")
+)
+
+type block []byte
 
 type LinearAllocator struct {
-	bufferAllocSize       int
-	buffers               []buffer
-	curBuffer             int
+	blockSize             int
+	blocks                []block
+	curBlock              int
 	scanObjs              []reflect.Value
-	knownPtrs             map[uintptr]interface{}
+	knownPointers         map[uintptr]interface{}
 	enablePointerChecking bool
 }
 
 func NewLinearAllocator() (ret *LinearAllocator) {
-	defaultCap := 1024 * 4
+	blockSize := 1024 * 8
 	ret = &LinearAllocator{
-		bufferAllocSize:       defaultCap,
-		buffers:               []buffer{make(buffer, 0, defaultCap)},
-		curBuffer:             0,
-		knownPtrs:             make(map[uintptr]interface{}),
+		blockSize:             blockSize,
+		blocks:                []block{make(block, 0, blockSize)},
+		curBlock:              0,
+		knownPointers:         make(map[uintptr]interface{}),
 		enablePointerChecking: atomic.LoadInt32(&DbgCheckPointers) == 1,
 	}
 
-	tp := reflect.TypeOf(int(0))
-	if reflect.TypeOf(tp).Elem().Size() != unsafe.Sizeof(rtype{}) {
+	if reflect.TypeOf(intType).Elem().Size() != unsafe.Sizeof(rtype{}) {
 		panic(fmt.Errorf("golang runtime structs mismatch"))
 	}
 	return
@@ -92,16 +101,16 @@ func NewLinearAllocator() (ret *LinearAllocator) {
 func (ac *LinearAllocator) FreeAll() {
 	if ac.enablePointerChecking {
 		ac.checkPointers()
-		for k := range ac.knownPtrs {
-			delete(ac.knownPtrs, k)
+		for k := range ac.knownPointers {
+			delete(ac.knownPointers, k)
 		}
 		ac.scanObjs = ac.scanObjs[:0]
 	}
 
-	for idx, buf := range ac.buffers {
-		ac.buffers[idx] = buf[:0]
+	for idx, buf := range ac.blocks {
+		ac.blocks[idx] = buf[:0]
 	}
-	ac.curBuffer = 0
+	ac.curBlock = 0
 }
 
 func (ac *LinearAllocator) New(ptrToPtr interface{}) {
@@ -121,20 +130,31 @@ func copyBytes(src, dst unsafe.Pointer, len int) {
 	}
 }
 
+func clearBytes(dst unsafe.Pointer, len int) {
+	align := unsafe.Sizeof(uintptr(0))
+	alignedEnd := uintptr(len) / align * align
+	i := uintptr(0)
+	for ; i < alignedEnd; i += align {
+		*(*uintptr)(unsafe.Pointer(uintptr(dst) + i)) = 0
+	}
+	for ; i < uintptr(len); i++ {
+		*(*byte)(unsafe.Pointer(uintptr(dst) + i)) = 0
+	}
+}
+
 func (ac *LinearAllocator) alloc(need int) unsafe.Pointer {
 start:
-	buf := &ac.buffers[ac.curBuffer]
+	buf := &ac.blocks[ac.curBlock]
 	used := len(*buf)
 	if used+need > cap(*buf) {
-		ac.buffers = append(ac.buffers, make(buffer, 0, int32(math.Max(float64(ac.bufferAllocSize), float64(need)))))
-		ac.curBuffer++
+		ac.blocks = append(ac.blocks, make(block, 0, int32(math.Max(float64(ac.blockSize), float64(need)))))
+		ac.curBlock++
 		goto start
 	}
 	*buf = (*buf)[:used+need]
-	for i := 0; i < need; i++ {
-		(*buf)[i+used] = 0
-	}
-	return unsafe.Pointer(&(*buf)[used])
+	ptr := unsafe.Pointer(&(*buf)[used])
+	clearBytes(ptr, need)
+	return ptr
 }
 
 func (ac *LinearAllocator) typedAlloc(tp reflect.Type) (ret interface{}) {
@@ -145,7 +165,7 @@ func (ac *LinearAllocator) typedAlloc(tp reflect.Type) (ret interface{}) {
 		if tp.Kind() == reflect.Struct {
 			ac.scanObjs = append(ac.scanObjs, r)
 		}
-		ac.knownPtrs[uintptr(ptr)] = ret
+		ac.knownPointers[uintptr(ptr)] = ret
 	}
 	return
 }
@@ -188,7 +208,7 @@ func (ac *LinearAllocator) SliceAppend(slicePtr interface{}, itemPtr interface{}
 		slice_.Len = pre.Len
 
 		if ac.enablePointerChecking {
-			delete(ac.knownPtrs, uintptr(pre.Data))
+			delete(ac.knownPointers, uintptr(pre.Data))
 		}
 	}
 
@@ -199,7 +219,7 @@ func (ac *LinearAllocator) SliceAppend(slicePtr interface{}, itemPtr interface{}
 		slice_.Len++
 
 		if ac.enablePointerChecking {
-			ac.knownPtrs[uintptr(slice_.Data)] = slicePtr
+			ac.knownPointers[uintptr(slice_.Data)] = slicePtr
 		}
 	}
 }
@@ -223,7 +243,7 @@ func (ac *LinearAllocator) checkPointers() {
 func (ac *LinearAllocator) checkRecursively(pe reflect.Value) error {
 	if pe.Kind() == reflect.Ptr {
 		if !pe.IsNil() {
-			if _, ok := ac.knownPtrs[pe.Pointer()]; !ok {
+			if _, ok := ac.knownPointers[pe.Pointer()]; !ok {
 				return fmt.Errorf("unexpected external pointer: %+v", pe)
 			}
 			if pe.Elem().Type().Kind() == reflect.Struct {
@@ -243,7 +263,7 @@ func (ac *LinearAllocator) checkRecursively(pe reflect.Value) error {
 					return fmt.Errorf("%v: %v", fieldName(i), err)
 				}
 			case reflect.Slice:
-				if _, ok := ac.knownPtrs[f.Index(0).UnsafeAddr()]; !ok {
+				if _, ok := ac.knownPointers[f.Index(0).UnsafeAddr()]; !ok {
 					return fmt.Errorf("%v: unexpected external pointer: %+v", fieldName(i), f)
 				}
 				fallthrough
@@ -258,14 +278,6 @@ func (ac *LinearAllocator) checkRecursively(pe reflect.Value) error {
 	}
 	return nil
 }
-
-var boolType = reflect.TypeOf(true)
-var intType = reflect.TypeOf(int(0))
-var int32Type = reflect.TypeOf(int32(0))
-var int64Type = reflect.TypeOf(int64(0))
-var f32Type = reflect.TypeOf(float32(0))
-var f64Type = reflect.TypeOf(float64(0))
-var strType = reflect.TypeOf("")
 
 func (ac *LinearAllocator) Bool(v bool) (r *bool) {
 	r = ac.typedAlloc(boolType).(*bool)
