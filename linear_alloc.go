@@ -119,8 +119,8 @@ func (ac *LinearAllocator) Reset() {
 }
 
 func (ac *LinearAllocator) New(ptrToPtr interface{}) {
-	// cheat the escape analyser
 	var temp interface{}
+	// store in an uintptr to cheat the escape analyser
 	ifaceAddr := (uintptr)(unsafe.Pointer(&ptrToPtr))
 	dstEface := (*emptyInterface)(unsafe.Pointer(ifaceAddr))
 	*(*emptyInterface)(unsafe.Pointer(&temp)) = *dstEface
@@ -229,8 +229,8 @@ func (ac *LinearAllocator) SliceAppend(slicePtr interface{}, itemPtr interface{}
 
 	// append
 	if slice_.Len < slice_.Cap {
-		cur := uintptr(slice_.Data) + sliceTyp.elem.size*uintptr(slice_.Len)
-		*(*uintptr)(unsafe.Pointer(cur)) = (uintptr)(itemEface.data)
+		d := unsafe.Pointer(uintptr(slice_.Data) + sliceTyp.elem.size*uintptr(slice_.Len))
+		*(*uintptr)(d) = (uintptr)(itemEface.data)
 		slice_.Len++
 
 		if ac.enablePointerChecking {
