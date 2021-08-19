@@ -1,9 +1,9 @@
 package linear_ac
 
 import (
+	"fmt"
 	"runtime"
 	"testing"
-	"unsafe"
 )
 
 type PbItem struct {
@@ -21,7 +21,7 @@ type PbData struct {
 }
 
 func Test_LinearAlloc(t *testing.T) {
-	ac := NewLinearAllocator(100 * 1024)
+	ac := NewLinearAllocator()
 	var d *PbData
 	ac.New(&d)
 	d.Age = ac.Int(11)
@@ -61,7 +61,7 @@ func Test_LinearAlloc(t *testing.T) {
 }
 
 func Test_Check(t *testing.T) {
-	ac := NewLinearAllocator(100 * 1024)
+	ac := NewLinearAllocator()
 	defer func() {
 		if err := recover(); err == nil {
 			t.Errorf("faile to check")
@@ -87,11 +87,10 @@ func Test_WorkWithGc(t *testing.T) {
 		v [10]*int
 	}
 
-	ac := NewLinearAllocator(int(unsafe.Sizeof(D{})))
+	ac := NewLinearAllocator()
 	defer ac.FreeAll()
 
 	var d *D
-	d = new(D)
 	ac.New(&d)
 
 	for i := 0; i < len(d.v); i++ {
@@ -99,9 +98,6 @@ func Test_WorkWithGc(t *testing.T) {
 		//d.v[i] = new(int)
 		*d.v[i] = i
 		runtime.GC()
-	}
-	if ac.Miss != len(d.v) {
-		t.Errorf("member int must use buildin allocator")
 	}
 
 	for i, p := range d.v {
@@ -111,15 +107,33 @@ func Test_WorkWithGc(t *testing.T) {
 	}
 }
 
+func Test_String(t *testing.T) {
+	ac := NewLinearAllocator()
+	defer ac.FreeAll()
+
+	type D struct {
+		s [5]*string
+	}
+	var d *D
+	ac.New(&d)
+	for i, _ := range d.s {
+		d.s[i] = ac.String(fmt.Sprintf("str%v", i))
+		runtime.GC()
+	}
+	for i, p := range d.s {
+		if *p != fmt.Sprintf("str%v", i) {
+			t.Errorf("elem %v is gced", i)
+		}
+	}
+}
+
 func Benchmark_linearAlloc(t *testing.B) {
 	t.ReportAllocs()
 	DbgCheckPointers = 0
-	DbgAllowExternalPointers = 0
-	ac := NewLinearAllocator(500 * 1024)
+	ac := NewLinearAllocator()
 	defer func() {
 		ac.FreeAll()
 		DbgCheckPointers = 1
-		DbgAllowExternalPointers = 1
 	}()
 	t.StartTimer()
 
@@ -128,7 +142,8 @@ func Benchmark_linearAlloc(t *testing.B) {
 		ac.New(&d)
 		d.Age = ac.Int(11)
 
-		for j := 0; j < 1000; j++ {
+		n := 1000
+		for j := 0; j < n; j++ {
 			var item *PbItem
 			ac.New(&item)
 			item.Id = ac.Int(2 + j)
@@ -142,10 +157,10 @@ func Benchmark_linearAlloc(t *testing.B) {
 		if *d.Age != 11 {
 			t.Errorf("age")
 		}
-		if len(d.Items) != 1000 {
+		if len(d.Items) != n {
 			t.Errorf("item")
 		}
-		for j := 0; j < 1000; j++ {
+		for j := 0; j < n; j++ {
 			if *d.Items[j].Id != 2+j {
 				t.Errorf("item.id")
 			}
@@ -154,9 +169,6 @@ func Benchmark_linearAlloc(t *testing.B) {
 		ac.FreeAll()
 	}
 	t.StopTimer()
-	if ac.Miss > 0 {
-		t.Fail()
-	}
 }
 
 func Benchmark_buildInAlloc(t *testing.B) {
@@ -172,7 +184,8 @@ func Benchmark_buildInAlloc(t *testing.B) {
 		var d *PbData = new(PbData)
 		d.Age = newInt(11)
 
-		for j := 0; j < 1000; j++ {
+		n := 1000
+		for j := 0; j < n; j++ {
 
 			var item *PbItem = new(PbItem)
 			item.Id = newInt(2 + j)
@@ -187,10 +200,10 @@ func Benchmark_buildInAlloc(t *testing.B) {
 		if *d.Age != 11 {
 			t.Errorf("age")
 		}
-		if len(d.Items) != 1000 {
+		if len(d.Items) != n {
 			t.Errorf("item")
 		}
-		for j := 0; j < 1000; j++ {
+		for j := 0; j < n; j++ {
 			if *d.Items[j].Id != 2+j {
 				t.Errorf("item.id")
 			}
