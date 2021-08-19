@@ -105,14 +105,14 @@ func (ac *LinearAllocator) New(ptrToPtr interface{}) {
 }
 
 func copyBytes(src, dst unsafe.Pointer, len int) {
-	align := int(unsafe.Sizeof(uintptr(0)))
-	alignedEnd := len / align * align
-	i := 0
+	align := unsafe.Sizeof(uintptr(0))
+	alignedEnd := uintptr(len) / align * align
+	i := uintptr(0)
 	for ; i < alignedEnd; i += align {
-		*(*uintptr)(unsafe.Pointer(uintptr(dst) + uintptr(i))) = *(*uintptr)(unsafe.Pointer(uintptr(src) + uintptr(i)))
+		*(*uintptr)(unsafe.Pointer(uintptr(dst) + i)) = *(*uintptr)(unsafe.Pointer(uintptr(src) + i))
 	}
-	for ; i < len; i++ {
-		*(*byte)(unsafe.Pointer(uintptr(dst) + uintptr(i))) = *(*byte)(unsafe.Pointer(uintptr(src) + uintptr(i)))
+	for ; i < uintptr(len); i++ {
+		*(*byte)(unsafe.Pointer(uintptr(dst) + i)) = *(*byte)(unsafe.Pointer(uintptr(src) + i))
 	}
 }
 
