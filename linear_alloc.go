@@ -62,8 +62,6 @@ var (
 	// DbgCheckPointers checks if user allocates from build-in allocator.
 	DbgCheckPointers int32 = 1
 
-	// BlockSize increase the value if you have large objects to alloc, otherwise the
-	// allocator will waste a lot of block due to the needed block is created at the end of the block list.
 	BlockSize = 1024 * 4
 )
 
@@ -154,6 +152,8 @@ start:
 	if used+need > cap(*buf) {
 		if ac.curBlock == len(ac.blocks)-1 {
 			ac.blocks = append(ac.blocks, make(block, 0, int32(math.Max(float64(ac.blockSize), float64(need)))))
+		} else if cap(ac.blocks[ac.curBlock+1]) < need {
+			ac.blocks[ac.curBlock+1] = make(block, 0, need)
 		}
 		ac.curBlock++
 		goto start
