@@ -147,7 +147,9 @@ start:
 	buf := &ac.blocks[ac.curBlock]
 	used := len(*buf)
 	if used+need > cap(*buf) {
-		ac.blocks = append(ac.blocks, make(block, 0, int32(math.Max(float64(ac.blockSize), float64(need)))))
+		if ac.curBlock == len(ac.blocks)-1 {
+			ac.blocks = append(ac.blocks, make(block, 0, int32(math.Max(float64(ac.blockSize), float64(need)))))
+		}
 		ac.curBlock++
 		goto start
 	}
