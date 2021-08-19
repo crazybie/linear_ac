@@ -1,3 +1,10 @@
+// Package linear_ac
+// The goal is to speed up the memory allocation and gc marking phase.
+//
+// TODO:
+// support value type as slice elem
+// support map
+
 package linear_ac
 
 import (
@@ -186,7 +193,6 @@ func (ac *LinearAllocator) TypedNew(tp reflect.Type) (ret interface{}) {
 }
 
 // SliceAppend append pointers to slice
-// TODO: support value type as slice elem
 func (ac *LinearAllocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 	refSlicePtrTp := reflect.TypeOf(slicePtr)
 	if refSlicePtrTp.Kind() != reflect.Ptr || refSlicePtrTp.Elem().Kind() != reflect.Slice {
