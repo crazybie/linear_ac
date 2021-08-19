@@ -81,6 +81,11 @@ func NewLinearAllocator() (ret *LinearAllocator) {
 		knownPtrs:             make(map[uintptr]interface{}),
 		enablePointerChecking: atomic.LoadInt32(&DbgCheckPointers) == 1,
 	}
+
+	tp := reflect.TypeOf(int(0))
+	if reflect.TypeOf(tp).Elem().Size() != unsafe.Sizeof(rtype{}) {
+		panic(fmt.Errorf("golang runtime structs mismatch"))
+	}
 	return
 }
 
