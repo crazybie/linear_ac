@@ -58,8 +58,12 @@ type ptrType struct {
 
 /// MatchWithGolangRuntime End
 
-// DbgCheckPointers checks if user allocates from build-in allocator.
-var DbgCheckPointers int32 = 1
+var (
+	// DbgCheckPointers checks if user allocates from build-in allocator.
+	DbgCheckPointers int32 = 1
+
+	BlockSize = 1024 * 4
+)
 
 var (
 	boolType  = reflect.TypeOf(true)
@@ -83,10 +87,9 @@ type LinearAllocator struct {
 }
 
 func NewLinearAllocator() (ret *LinearAllocator) {
-	blockSize := 1024 * 8
 	ret = &LinearAllocator{
-		blockSize:             blockSize,
-		blocks:                []block{make(block, 0, blockSize)},
+		blockSize:             BlockSize,
+		blocks:                []block{make(block, 0, BlockSize)},
 		curBlock:              0,
 		knownPointers:         make(map[uintptr]interface{}),
 		enablePointerChecking: atomic.LoadInt32(&DbgCheckPointers) == 1,
