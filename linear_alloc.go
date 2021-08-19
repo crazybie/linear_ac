@@ -141,10 +141,9 @@ func copyBytes(src, dst unsafe.Pointer, len int) {
 }
 
 func clearBytes(dst unsafe.Pointer, len int) {
-	align := unsafe.Sizeof(uintptr(0))
-	alignedEnd := uintptr(len) / align * align
+	alignedEnd := uintptr(len) / uintptrSize * uintptrSize
 	i := uintptr(0)
-	for ; i < alignedEnd; i += align {
+	for ; i < alignedEnd; i += uintptrSize {
 		*(*uintptr)(unsafe.Pointer(uintptr(dst) + i)) = 0
 	}
 	for ; i < uintptr(len); i++ {
