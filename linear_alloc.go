@@ -62,6 +62,8 @@ var (
 	// DbgCheckPointers checks if user allocates from build-in allocator.
 	DbgCheckPointers int32 = 1
 
+	// BlockSize increase the value if you have large objects to alloc, otherwise the
+	// allocator will waste a lot of block due to the needed block is created at the end of the block list.
 	BlockSize = 1024 * 4
 )
 
