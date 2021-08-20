@@ -47,3 +47,10 @@ type PbData struct {
 	}
 
  ```
+ 
+ ## Benchmark
+ 
+Benchmark_linearAlloc
+Benchmark_linearAlloc-8    	    3890	    277651 ns/op	      27 B/op	       0 allocs/op
+Benchmark_buildInAlloc
+Benchmark_buildInAlloc-8   	    4744	    254372 ns/op	  112440 B/op	    6013 allocs/op
