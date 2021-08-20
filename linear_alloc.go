@@ -1,8 +1,16 @@
-// Package linear_ac
-// The goal is to speed up the memory allocation and gc marking phase.
 //
-// TODO:
-// SliceAppend support value type as elem
+// Linear Allocator
+//
+// # Goal
+// Speed up the memory allocation and garbage collection performance.
+//
+// # Possible Usage
+// 1. global memory never need to be release. (configs, global systems)
+// 2. temporary objects with deterministic lifetime. (buffers send to network)
+//
+// # TODO:
+// 1. SliceAppend support value type as elem
+//
 
 package linear_ac
 
@@ -69,7 +77,7 @@ type ptrType struct {
 
 var (
 	// DbgCheckPointers checks if user allocates from build-in allocator.
-	DbgCheckPointers int32 = 1
+	DbgCheckPointers int32 = 0
 )
 
 const (
