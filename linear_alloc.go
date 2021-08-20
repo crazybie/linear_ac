@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"runtime"
 	"sync/atomic"
 	"unsafe"
 )
@@ -130,16 +131,17 @@ func (ac *LinearAllocator) Reset() {
 }
 
 func (ac *LinearAllocator) New(ptrToPtr interface{}) {
-	var temp interface{}
+	var ptrToPtrTemp interface{}
 	// store in an uintptr to cheat the escape analyser
-	ifaceAddr := (uintptr)(unsafe.Pointer(&ptrToPtr))
-	dstEface := (*emptyInterface)(unsafe.Pointer(ifaceAddr))
-	*(*emptyInterface)(unsafe.Pointer(&temp)) = *dstEface
+	p := *(*[2]uintptr)(unsafe.Pointer(&ptrToPtr))
+	*(*[2]uintptr)(unsafe.Pointer(&ptrToPtrTemp)) = p
 
-	tp := reflect.TypeOf(temp).Elem().Elem()
+	tp := reflect.TypeOf(ptrToPtrTemp).Elem().Elem()
 	v := ac.TypedNew(tp)
 	srcEface := (*emptyInterface)(unsafe.Pointer(&v))
-	*(*uintptr)(dstEface.data) = (uintptr)(srcEface.data)
+	*(*uintptr)(unsafe.Pointer(p[1])) = (uintptr)(srcEface.data)
+
+	runtime.KeepAlive(ptrToPtr)
 }
 
 func copyBytes(src, dst unsafe.Pointer, len int) {
@@ -198,7 +200,12 @@ func (ac *LinearAllocator) TypedNew(tp reflect.Type) (ret interface{}) {
 
 // SliceAppend append pointers to slice
 func (ac *LinearAllocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
-	refSlicePtrTp := reflect.TypeOf(slicePtr)
+	var slicePtrTmp interface{}
+	// store in an uintptr to cheat the escape analyser
+	p := *(*[2]uintptr)(unsafe.Pointer(&slicePtr))
+	*(*[2]uintptr)(unsafe.Pointer(&slicePtrTmp)) = p
+
+	refSlicePtrTp := reflect.TypeOf(slicePtrTmp)
 	if refSlicePtrTp.Kind() != reflect.Ptr || refSlicePtrTp.Elem().Kind() != reflect.Slice {
 		panic(fmt.Errorf("expect pointer to slice"))
 	}
@@ -210,7 +217,7 @@ func (ac *LinearAllocator) SliceAppend(slicePtr interface{}, itemPtr interface{}
 		panic(fmt.Errorf("elem type not match with slice"))
 	}
 
-	sliceEface := (*emptyInterface)(unsafe.Pointer(&slicePtr))
+	sliceEface := (*emptyInterface)(unsafe.Pointer(&slicePtrTmp))
 	slice_ := (*sliceHeader)(sliceEface.data)
 	ptrTyp := (*ptrType)(unsafe.Pointer(sliceEface.typ))
 	sliceTyp := (*sliceType)(unsafe.Pointer(ptrTyp.elem))
@@ -244,9 +251,11 @@ func (ac *LinearAllocator) SliceAppend(slicePtr interface{}, itemPtr interface{}
 		slice_.Len++
 
 		if ac.enablePointerChecking {
-			ac.knownPointers[uintptr(slice_.Data)] = slicePtr
+			ac.knownPointers[uintptr(slice_.Data)] = slicePtrTmp
 		}
 	}
+
+	runtime.KeepAlive(slicePtr)
 }
 
 func (ac *LinearAllocator) NewString(v string) string {
@@ -259,11 +268,18 @@ func (ac *LinearAllocator) NewString(v string) string {
 
 // NewMap use build-in allocator
 func (ac *LinearAllocator) NewMap(mapPtr interface{}) {
-	m := reflect.MakeMap(reflect.TypeOf(mapPtr).Elem())
+	var mapPtrTemp interface{}
+	// store in an uintptr to cheat the escape analyser
+	p := *(*[2]uintptr)(unsafe.Pointer(&mapPtr))
+	*(*[2]uintptr)(unsafe.Pointer(&mapPtr)) = p
+
+	m := reflect.MakeMap(reflect.TypeOf(mapPtrTemp).Elem())
 	i := m.Interface()
 	v := (*emptyInterface)(unsafe.Pointer(&i))
 	ac.maps[v.data] = struct{}{}
-	reflect.ValueOf(mapPtr).Elem().Set(m)
+	reflect.ValueOf(mapPtrTemp).Elem().Set(m)
+
+	runtime.KeepAlive(mapPtr)
 }
 
 func (ac *LinearAllocator) CheckPointers() {
