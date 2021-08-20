@@ -166,17 +166,6 @@ func TestLinearAllocator_ExternalMap(t *testing.T) {
 	ac.CheckPointers()
 }
 
-func TestLinearAllocator_New2(t *testing.T) {
-	ac := NewLinearAllocator()
-	d := ac.New2(&PbData{
-		Age: ac.Int(1),
-	}).(*PbData)
-
-	if *d.Age != 1 {
-		t.Fail()
-	}
-}
-
 func TestLinearAllocator_NewSlice(t *testing.T) {
 	ac := NewLinearAllocator()
 	s := []int{}
@@ -186,11 +175,9 @@ func TestLinearAllocator_NewSlice(t *testing.T) {
 	}
 }
 
-func BenchmarkLinearAllocator_New2(b *testing.B) {
-	b.ReportAllocs()
+func TestLinearAllocator_New2(b *testing.T) {
 	ac := NewLinearAllocator()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; i < 3; i++ {
 		d := ac.New2(&PbItem{
 			Id:    ac.Int(1 + i),
 			Class: ac.Int(2 + i),
@@ -209,7 +196,6 @@ func Benchmark_linearAlloc(t *testing.B) {
 	DbgCheckPointers = 0
 	ac := NewLinearAllocator()
 	defer func() {
-		ac.Reset()
 		DbgCheckPointers = 1
 	}()
 	t.StartTimer()
