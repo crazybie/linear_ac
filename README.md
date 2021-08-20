@@ -1,19 +1,25 @@
 
- # Linear Allocator
+# Linear Allocator
 
- ## Goal
- Speed up the memory allocation and garbage collection performance.
+## Goal
+Speed up the memory allocation and garbage collection performance.
 
- ## Possible Usage
- 1. global memory never need to be released. (configs, global systems)
- 2. temporary objects with deterministic lifetime. (buffers send to network)
+## Possible Usage
+1. global memory never need to be released. (configs, global systems)
+2. temporary objects with deterministic lifetime. (buffers send to network)
 
- ## TODO:
- 1. SliceAppend support value type as elem
- 
- ## Usage:
- ```go
- type PbItem struct {
+## Note
+1. don't assign memories allocated from build-in allocator to linear allocated objects.
+2. don't store the pointers of linear allocated objects after allocator released.
+
+
+## TODO:
+1. SliceAppend support value type as elem
+
+## Usage:
+
+```go
+type PbItem struct {
 	Id     *int
 	Price  *int
 	Class  *int
@@ -48,10 +54,10 @@ for i := 0; i < n; i++ {
 	ac.SliceAppend(&d.Items, item)
 }
 
- ```
- 
+```
+
 ## Benchmark
-Results from benchmark test:
+Results from benchmark tests:
 ``` 
 Benchmark_linearAlloc
 Benchmark_linearAlloc-8    	    3890	    277651 ns/op	      27 B/op	       0 allocs/op
