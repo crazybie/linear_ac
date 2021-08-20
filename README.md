@@ -28,23 +28,25 @@ type PbData struct {
 }
 
 
-  ac := NewLinearAllocator()
-	var d *PbData
-	ac.New(&d)
-	d.Age = ac.Int(11)
+// Usage
 
-	n := 3
-	for i := 0; i < n; i++ {
-		var item *PbItem
-		ac.New(&item)
-		item.Id = ac.Int(i + 1)
-		item.Active = ac.Bool(true)
-		item.Price = ac.Int(100 + i)
-		item.Class = ac.Int(3 + i)
-		item.Name = ac.String("name")
+ac := NewLinearAllocator()
+var d *PbData
+ac.New(&d)
+d.Age = ac.Int(11)
 
-		ac.SliceAppend(&d.Items, item)
-	}
+n := 3
+for i := 0; i < n; i++ {
+	var item *PbItem
+	ac.New(&item)
+	item.Id = ac.Int(i + 1)
+	item.Active = ac.Bool(true)
+	item.Price = ac.Int(100 + i)
+	item.Class = ac.Int(3 + i)
+	item.Name = ac.String("name")
+
+	ac.SliceAppend(&d.Items, item)
+}
 
  ```
  
