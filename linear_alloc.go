@@ -68,8 +68,10 @@ type ptrType struct {
 var (
 	// DbgCheckPointers checks if user allocates from build-in allocator.
 	DbgCheckPointers int32 = 1
+)
 
-	BlockSize = 1024 * 4
+const (
+	BlockSize = 1024 * 8
 )
 
 var (
@@ -87,25 +89,21 @@ var (
 type block []byte
 
 type LinearAllocator struct {
-	blockSize             int
-	blocks                []block
-	curBlock              int
-	scanObjs              []reflect.Value
-	knownPointers         map[uintptr]interface{}
-	enablePointerChecking bool
-	maps                  map[unsafe.Pointer]struct{}
+	blocks        []block
+	curBlock      int
+	scanObjs      []reflect.Value
+	knownPointers map[uintptr]interface{}
+	maps          map[unsafe.Pointer]struct{}
 }
 
 func NewLinearAllocator() (ret *LinearAllocator) {
 	ret = &LinearAllocator{
-		blockSize:             BlockSize,
-		blocks:                []block{make(block, 0, BlockSize)},
-		curBlock:              0,
-		knownPointers:         make(map[uintptr]interface{}),
-		enablePointerChecking: atomic.LoadInt32(&DbgCheckPointers) == 1,
-		maps:                  make(map[unsafe.Pointer]struct{}),
+		blocks: []block{make(block, 0, BlockSize/8)},
+		maps:   make(map[unsafe.Pointer]struct{}),
 	}
-
+	if atomic.LoadInt32(&DbgCheckPointers) == 1 {
+		ret.knownPointers = make(map[uintptr]interface{})
+	}
 	if reflect.TypeOf(intType).Elem().Size() != unsafe.Sizeof(rtype{}) {
 		panic(fmt.Errorf("golang runtime structs mismatch"))
 	}
@@ -113,7 +111,7 @@ func NewLinearAllocator() (ret *LinearAllocator) {
 }
 
 func (ac *LinearAllocator) Reset() {
-	if ac.enablePointerChecking {
+	if atomic.LoadInt32(&DbgCheckPointers) == 1 {
 		ac.CheckPointers()
 		for k := range ac.knownPointers {
 			delete(ac.knownPointers, k)
@@ -144,6 +142,21 @@ func (ac *LinearAllocator) New(ptrToPtr interface{}) {
 	runtime.KeepAlive(ptrToPtr)
 }
 
+// New2 is slower than New due to the data copying.
+func (ac *LinearAllocator) New2(ptr interface{}) interface{} {
+	var ptrTemp interface{}
+	// store in an uintptr to cheat the escape analyser
+	p := *(*[2]uintptr)(unsafe.Pointer(&ptr))
+	*(*[2]uintptr)(unsafe.Pointer(&ptrTemp)) = p
+
+	tp := reflect.TypeOf(ptrTemp).Elem()
+	ret := ac.TypedNew(tp)
+	copyBytes((*emptyInterface)(unsafe.Pointer(&ptrTemp)).data, (*emptyInterface)(unsafe.Pointer(&ret)).data, int(tp.Size()))
+
+	runtime.KeepAlive(ptr)
+	return ret
+}
+
 func copyBytes(src, dst unsafe.Pointer, len int) {
 	alignedEnd := uintptr(len) / uintptrSize * uintptrSize
 	i := uintptr(0)
@@ -172,7 +185,7 @@ start:
 	used := len(*buf)
 	if used+need > cap(*buf) {
 		if ac.curBlock == len(ac.blocks)-1 {
-			ac.blocks = append(ac.blocks, make(block, 0, int32(math.Max(float64(ac.blockSize), float64(need)))))
+			ac.blocks = append(ac.blocks, make(block, 0, int32(math.Max(float64(BlockSize), float64(need)))))
 		} else if cap(ac.blocks[ac.curBlock+1]) < need {
 			ac.blocks[ac.curBlock+1] = make(block, 0, need)
 		}
@@ -189,7 +202,7 @@ func (ac *LinearAllocator) TypedNew(tp reflect.Type) (ret interface{}) {
 	ptr := ac.alloc(int(tp.Size()))
 	r := reflect.NewAt(tp, ptr)
 	ret = r.Interface()
-	if ac.enablePointerChecking {
+	if atomic.LoadInt32(&DbgCheckPointers) == 1 {
 		if tp.Kind() == reflect.Struct {
 			ac.scanObjs = append(ac.scanObjs, r)
 		}
@@ -223,6 +236,7 @@ func (ac *LinearAllocator) SliceAppend(slicePtr interface{}, itemPtr interface{}
 	sliceTyp := (*sliceType)(unsafe.Pointer(ptrTyp.elem))
 	itemEface := (*emptyInterface)(unsafe.Pointer(&itemPtr))
 	elemSz := int(sliceTyp.elem.size)
+	pointerChecking := atomic.LoadInt32(&DbgCheckPointers) == 1
 
 	if elemSz > int(unsafe.Sizeof(uintptr(0))) {
 		panic(fmt.Errorf("unsupported slice"))
@@ -239,7 +253,7 @@ func (ac *LinearAllocator) SliceAppend(slicePtr interface{}, itemPtr interface{}
 		copyBytes(pre.Data, slice_.Data, pre.Len*elemSz)
 		slice_.Len = pre.Len
 
-		if ac.enablePointerChecking {
+		if pointerChecking {
 			delete(ac.knownPointers, uintptr(pre.Data))
 		}
 	}
@@ -250,7 +264,7 @@ func (ac *LinearAllocator) SliceAppend(slicePtr interface{}, itemPtr interface{}
 		*(*uintptr)(d) = (uintptr)(itemEface.data)
 		slice_.Len++
 
-		if ac.enablePointerChecking {
+		if pointerChecking {
 			ac.knownPointers[uintptr(slice_.Data)] = slicePtrTmp
 		}
 	}
