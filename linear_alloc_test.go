@@ -231,7 +231,6 @@ func Benchmark_linearAlloc(t *testing.B) {
 
 		ac.Reset()
 	}
-	t.StopTimer()
 }
 
 func Benchmark_buildInAlloc(t *testing.B) {
@@ -273,7 +272,6 @@ func Benchmark_buildInAlloc(t *testing.B) {
 		}
 		preventFromGc = append(preventFromGc, d)
 	}
-	t.StopTimer()
 	if len(preventFromGc) != t.N {
 		t.Fail()
 	}

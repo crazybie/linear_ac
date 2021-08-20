@@ -2,7 +2,7 @@
 // The goal is to speed up the memory allocation and gc marking phase.
 //
 // TODO:
-// support value type as slice elem
+// SliceAppend support value type as elem
 
 package linear_ac
 
