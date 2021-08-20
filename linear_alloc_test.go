@@ -115,7 +115,7 @@ func Test_String(t *testing.T) {
 	}
 	var d *D
 	ac.New(&d)
-	for i, _ := range d.s {
+	for i := range d.s {
 		d.s[i] = ac.String(fmt.Sprintf("str%v", i))
 		runtime.GC()
 	}
@@ -173,6 +173,15 @@ func TestLinearAllocator_New2(t *testing.T) {
 	}).(*PbData)
 
 	if *d.Age != 1 {
+		t.Fail()
+	}
+}
+
+func TestLinearAllocator_NewSlice(t *testing.T) {
+	ac := NewLinearAllocator()
+	s := []int{}
+	ac.NewSlice(&s, 32)
+	if cap(s) != 32 {
 		t.Fail()
 	}
 }

@@ -48,6 +48,8 @@ type rtype struct {
 	ptrToThis  int32
 }
 
+const rtypeSize = unsafe.Sizeof(rtype{})
+
 type emptyInterface struct {
 	typ  *rtype
 	data unsafe.Pointer
@@ -84,11 +86,14 @@ var (
 	f32Type   = reflect.TypeOf(float32(0))
 	f64Type   = reflect.TypeOf(float64(0))
 	strType   = reflect.TypeOf("")
+
+	reflectTypeSize = reflect.TypeOf(intType).Elem().Size()
 )
 
 type block []byte
 
 type LinearAllocator struct {
+	staticBlock   [1024]byte
 	blocks        []block
 	curBlock      int
 	scanObjs      []reflect.Value
@@ -97,14 +102,13 @@ type LinearAllocator struct {
 }
 
 func NewLinearAllocator() (ret *LinearAllocator) {
-	ret = &LinearAllocator{
-		blocks: []block{make(block, 0, BlockSize/8)},
-		maps:   make(map[unsafe.Pointer]struct{}),
-	}
+	ret = &LinearAllocator{}
+	ret.blocks = append(ret.blocks, ret.staticBlock[:0])
+
 	if atomic.LoadInt32(&DbgCheckPointers) == 1 {
 		ret.knownPointers = make(map[uintptr]interface{})
 	}
-	if reflect.TypeOf(intType).Elem().Size() != unsafe.Sizeof(rtype{}) {
+	if reflectTypeSize != rtypeSize {
 		panic(fmt.Errorf("golang runtime structs mismatch"))
 	}
 	return
@@ -211,6 +215,54 @@ func (ac *LinearAllocator) TypedNew(tp reflect.Type) (ret interface{}) {
 	return
 }
 
+func (ac *LinearAllocator) NewString(v string) string {
+	h := (*stringHeader)(unsafe.Pointer(&v))
+	ptr := ac.alloc(h.Len)
+	copyBytes(h.Data, ptr, h.Len)
+	h.Data = ptr
+	return v
+}
+
+// NewMap use build-in allocator
+func (ac *LinearAllocator) NewMap(mapPtr interface{}) {
+	var mapPtrTemp interface{}
+	// store in an uintptr to cheat the escape analyser
+	p := *(*[2]uintptr)(unsafe.Pointer(&mapPtr))
+	*(*[2]uintptr)(unsafe.Pointer(&mapPtrTemp)) = p
+
+	m := reflect.MakeMap(reflect.TypeOf(mapPtrTemp).Elem())
+	i := m.Interface()
+	v := (*emptyInterface)(unsafe.Pointer(&i))
+	reflect.ValueOf(mapPtrTemp).Elem().Set(m)
+
+	if ac.maps == nil {
+		ac.maps = make(map[unsafe.Pointer]struct{})
+	}
+	ac.maps[v.data] = struct{}{}
+
+	runtime.KeepAlive(mapPtr)
+}
+
+func (ac *LinearAllocator) NewSlice(slicePtr interface{}, cap_ int) {
+	var slicePtrTmp interface{}
+	// store in an uintptr to cheat the escape analyser
+	p := *(*[2]uintptr)(unsafe.Pointer(&slicePtr))
+	*(*[2]uintptr)(unsafe.Pointer(&slicePtrTmp)) = p
+
+	refSlicePtrType := reflect.TypeOf(slicePtrTmp)
+	if refSlicePtrType.Kind() != reflect.Ptr || refSlicePtrType.Elem().Kind() != reflect.Slice {
+		panic(fmt.Errorf("need a pointer to slice"))
+	}
+
+	sliceEface := (*emptyInterface)(unsafe.Pointer(&slicePtrTmp))
+	slice_ := (*sliceHeader)(sliceEface.data)
+	ptrTyp := (*ptrType)(unsafe.Pointer(sliceEface.typ))
+	sliceTyp := (*sliceType)(unsafe.Pointer(ptrTyp.elem))
+	slice_.Data = ac.alloc(cap_ * int(sliceTyp.elem.size))
+	slice_.Len = 0
+	slice_.Cap = cap_
+}
+
 // SliceAppend append pointers to slice
 func (ac *LinearAllocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 	var slicePtrTmp interface{}
@@ -270,30 +322,6 @@ func (ac *LinearAllocator) SliceAppend(slicePtr interface{}, itemPtr interface{}
 	}
 
 	runtime.KeepAlive(slicePtr)
-}
-
-func (ac *LinearAllocator) NewString(v string) string {
-	h := (*stringHeader)(unsafe.Pointer(&v))
-	ptr := ac.alloc(h.Len)
-	copyBytes(h.Data, ptr, h.Len)
-	h.Data = ptr
-	return v
-}
-
-// NewMap use build-in allocator
-func (ac *LinearAllocator) NewMap(mapPtr interface{}) {
-	var mapPtrTemp interface{}
-	// store in an uintptr to cheat the escape analyser
-	p := *(*[2]uintptr)(unsafe.Pointer(&mapPtr))
-	*(*[2]uintptr)(unsafe.Pointer(&mapPtr)) = p
-
-	m := reflect.MakeMap(reflect.TypeOf(mapPtrTemp).Elem())
-	i := m.Interface()
-	v := (*emptyInterface)(unsafe.Pointer(&i))
-	ac.maps[v.data] = struct{}{}
-	reflect.ValueOf(mapPtrTemp).Elem().Set(m)
-
-	runtime.KeepAlive(mapPtr)
 }
 
 func (ac *LinearAllocator) CheckPointers() {
