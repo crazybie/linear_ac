@@ -5,7 +5,7 @@
 // Speed up the memory allocation and garbage collection performance.
 //
 // # Possible Usage
-// 1. global memory never need to be release. (configs, global systems)
+// 1. global memory never need to be released. (configs, global systems)
 // 2. temporary objects with deterministic lifetime. (buffers send to network)
 //
 // # TODO:
