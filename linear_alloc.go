@@ -3,7 +3,6 @@
 //
 // TODO:
 // support value type as slice elem
-// support map
 
 package linear_ac
 
@@ -93,6 +92,7 @@ type LinearAllocator struct {
 	scanObjs              []reflect.Value
 	knownPointers         map[uintptr]interface{}
 	enablePointerChecking bool
+	maps                  map[unsafe.Pointer]struct{}
 }
 
 func NewLinearAllocator() (ret *LinearAllocator) {
@@ -102,6 +102,7 @@ func NewLinearAllocator() (ret *LinearAllocator) {
 		curBlock:              0,
 		knownPointers:         make(map[uintptr]interface{}),
 		enablePointerChecking: atomic.LoadInt32(&DbgCheckPointers) == 1,
+		maps:                  make(map[unsafe.Pointer]struct{}),
 	}
 
 	if reflect.TypeOf(intType).Elem().Size() != unsafe.Sizeof(rtype{}) {
@@ -112,7 +113,7 @@ func NewLinearAllocator() (ret *LinearAllocator) {
 
 func (ac *LinearAllocator) Reset() {
 	if ac.enablePointerChecking {
-		ac.checkPointers()
+		ac.CheckPointers()
 		for k := range ac.knownPointers {
 			delete(ac.knownPointers, k)
 		}
@@ -123,6 +124,9 @@ func (ac *LinearAllocator) Reset() {
 		ac.blocks[idx] = buf[:0]
 	}
 	ac.curBlock = 0
+	for k := range ac.maps {
+		delete(ac.maps, k)
+	}
 }
 
 func (ac *LinearAllocator) New(ptrToPtr interface{}) {
@@ -253,7 +257,16 @@ func (ac *LinearAllocator) NewString(v string) string {
 	return v
 }
 
-func (ac *LinearAllocator) checkPointers() {
+// NewMap use build-in allocator
+func (ac *LinearAllocator) NewMap(mapPtr interface{}) {
+	m := reflect.MakeMap(reflect.TypeOf(mapPtr).Elem())
+	i := m.Interface()
+	v := (*emptyInterface)(unsafe.Pointer(&i))
+	ac.maps[v.data] = struct{}{}
+	reflect.ValueOf(mapPtr).Elem().Set(m)
+}
+
+func (ac *LinearAllocator) CheckPointers() {
 	for _, ptr := range ac.scanObjs {
 		if err := ac.checkRecursively(ptr); err != nil {
 			panic(err)
@@ -271,6 +284,7 @@ func (ac *LinearAllocator) checkRecursively(pe reflect.Value) error {
 				return ac.checkRecursively(pe.Elem())
 			}
 		}
+		return nil
 	}
 	fieldName := func(i int) string {
 		return fmt.Sprintf("%v.%v", pe.Type().Name(), pe.Type().Field(i).Name)
@@ -291,6 +305,16 @@ func (ac *LinearAllocator) checkRecursively(pe reflect.Value) error {
 			case reflect.Array:
 				for j := 0; j < f.Len(); j++ {
 					if err := ac.checkRecursively(f.Index(j)); err != nil {
+						return fmt.Errorf("%v: %v", fieldName(i), err)
+					}
+				}
+			case reflect.Map:
+				m := *(*unsafe.Pointer)(unsafe.Pointer(f.UnsafeAddr()))
+				if _, ok := ac.maps[m]; !ok {
+					return fmt.Errorf("%v: unexpected external pointer: %+v", fieldName(i), f)
+				}
+				for iter := f.MapRange(); iter.Next(); {
+					if err := ac.checkRecursively(iter.Value()); err != nil {
 						return fmt.Errorf("%v: %v", fieldName(i), err)
 					}
 				}

@@ -78,7 +78,7 @@ func Test_Check(t *testing.T) {
 		d.v[i] = new(int)
 		*d.v[i] = i
 	}
-	ac.checkPointers()
+	ac.CheckPointers()
 }
 
 func Test_WorkWithGc(t *testing.T) {
@@ -124,6 +124,46 @@ func Test_String(t *testing.T) {
 			t.Errorf("elem %v is gced", i)
 		}
 	}
+}
+
+func TestLinearAllocator_NewMap(t *testing.T) {
+	ac := NewLinearAllocator()
+	defer ac.Reset()
+
+	type D struct {
+		m map[int]*int
+	}
+	data := [10]*D{}
+	for i := 0; i < len(data); i++ {
+		var d *D
+		ac.New(&d)
+		ac.NewMap(&d.m)
+		d.m[1] = ac.Int(i)
+		data[i] = d
+		runtime.GC()
+	}
+	for i, d := range data {
+		if *d.m[1] != i {
+			t.Fail()
+		}
+	}
+}
+
+func TestLinearAllocator_ExternalMap(t *testing.T) {
+	ac := NewLinearAllocator()
+	defer func() {
+		if err := recover(); err == nil {
+			t.Errorf("faile to check")
+		}
+	}()
+
+	type D struct {
+		m map[int]*int
+	}
+	var d *D
+	ac.New(&d)
+	d.m = make(map[int]*int)
+	ac.CheckPointers()
 }
 
 func Benchmark_linearAlloc(t *testing.B) {
