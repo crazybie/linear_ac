@@ -5,23 +5,23 @@
 Speed up the memory allocation and garbage collection performance.
 
 ## Compare with pool
-1. More generel. Linear allocator can allocate different types of objects.
-3. Greatly reduce the gc object scanning overhead. Linear allocator is just a few byte arrays. 
-5. Much simpler and faster on recliming memories. No need to mannually release each object allocated from the linear allocator, just reset the allocation cursor and everything is done.
+1. More general. The linear allocator can allocate different types of objects.
+3. Greatly reduce the GC object scanning overhead. Linear allocator is just a few byte arrays. 
+5. Much simpler and faster on reclaiming memories. No need to manually release each object allocated from the linear allocator, just reset the allocation cursor and everything is done.
 
 ## Limitations
-1. Don't assign memories allocated from build-in allocator to linear allocated objects.
-2. Don't store the pointers of linear allocated objects after allocator released.
+1. Don't assign memories allocated from the build-in allocator to linear allocated objects.
+2. Don't store the pointers of linear allocated objects after the allocator is released.
 
 
 ## Possible Usecase
-1. Global memory never need to be released. (configs, global systems)
+1. Global memory never needs to be released. (configs, global systems)
 2. Temporary objects with deterministic lifetime. (buffers send to network)
 
 
 
 ## TODO:
-1. SliceAppend support value type as elem
+1. SliceAppend support value type as the element.
 
 ## Usage:
 
