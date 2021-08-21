@@ -1,15 +1,10 @@
 //
+// Copyright (C) 2020-2021 crazybie@git.com.
+//
+//
 // Linear Allocator
 //
-// # Goal
-// Speed up the memory allocation and garbage collection performance.
-//
-// # Possible Usage
-// 1. global memory never need to be released. (configs, global systems)
-// 2. temporary objects with deterministic lifetime. (buffers send to network)
-//
-// # TODO:
-// 1. SliceAppend support value type as elem
+// Improve the memory allocation and garbage collection performance.
 //
 
 package linear_ac
@@ -56,8 +51,6 @@ type rtype struct {
 	ptrToThis  int32
 }
 
-const rtypeSize = unsafe.Sizeof(rtype{})
-
 type emptyInterface struct {
 	typ  *rtype
 	data unsafe.Pointer
@@ -82,6 +75,7 @@ var (
 
 const (
 	BlockSize = 1024 * 8
+	rtypeSize = unsafe.Sizeof(rtype{})
 )
 
 var (
@@ -148,10 +142,7 @@ func (ac *LinearAllocator) New(ptrToPtr interface{}) {
 
 	tp := reflect.TypeOf(ptrToPtrTemp).Elem().Elem()
 	v := ac.TypedNew(tp)
-	srcEface := (*emptyInterface)(unsafe.Pointer(&v))
-	*(*uintptr)(unsafe.Pointer(p[1])) = (uintptr)(srcEface.data)
-
-	runtime.KeepAlive(ptrToPtr)
+	*(*uintptr)(unsafe.Pointer(p[1])) = (uintptr)((*emptyInterface)(unsafe.Pointer(&v)).data)
 }
 
 // New2 is slower than New due to the data copying.
@@ -165,8 +156,39 @@ func (ac *LinearAllocator) New2(ptr interface{}) interface{} {
 	ret := ac.TypedNew(tp)
 	copyBytes((*emptyInterface)(unsafe.Pointer(&ptrTemp)).data, (*emptyInterface)(unsafe.Pointer(&ret)).data, int(tp.Size()))
 
-	runtime.KeepAlive(ptr)
 	return ret
+}
+
+func (ac *LinearAllocator) TypedNew(tp reflect.Type) (ret interface{}) {
+	ptr := ac.alloc(int(tp.Size()))
+	r := reflect.NewAt(tp, ptr)
+	ret = r.Interface()
+	if atomic.LoadInt32(&DbgCheckPointers) == 1 {
+		if tp.Kind() == reflect.Struct {
+			ac.scanObjs = append(ac.scanObjs, r)
+		}
+		ac.knownPointers[uintptr(ptr)] = ret
+	}
+	return
+}
+
+func (ac *LinearAllocator) alloc(need int) unsafe.Pointer {
+start:
+	buf := &ac.blocks[ac.curBlock]
+	used := len(*buf)
+	if used+need > cap(*buf) {
+		if ac.curBlock == len(ac.blocks)-1 {
+			ac.blocks = append(ac.blocks, make(block, 0, int32(math.Max(float64(BlockSize), float64(need)))))
+		} else if cap(ac.blocks[ac.curBlock+1]) < need {
+			ac.blocks[ac.curBlock+1] = make(block, 0, need)
+		}
+		ac.curBlock++
+		goto start
+	}
+	*buf = (*buf)[:used+need]
+	ptr := unsafe.Pointer(&(*buf)[used])
+	clearBytes(ptr, need)
+	return ptr
 }
 
 func copyBytes(src, dst unsafe.Pointer, len int) {
@@ -189,38 +211,6 @@ func clearBytes(dst unsafe.Pointer, len int) {
 	for ; i < uintptr(len); i++ {
 		*(*byte)(unsafe.Pointer(uintptr(dst) + i)) = 0
 	}
-}
-
-func (ac *LinearAllocator) alloc(need int) unsafe.Pointer {
-start:
-	buf := &ac.blocks[ac.curBlock]
-	used := len(*buf)
-	if used+need > cap(*buf) {
-		if ac.curBlock == len(ac.blocks)-1 {
-			ac.blocks = append(ac.blocks, make(block, 0, int32(math.Max(float64(BlockSize), float64(need)))))
-		} else if cap(ac.blocks[ac.curBlock+1]) < need {
-			ac.blocks[ac.curBlock+1] = make(block, 0, need)
-		}
-		ac.curBlock++
-		goto start
-	}
-	*buf = (*buf)[:used+need]
-	ptr := unsafe.Pointer(&(*buf)[used])
-	clearBytes(ptr, need)
-	return ptr
-}
-
-func (ac *LinearAllocator) TypedNew(tp reflect.Type) (ret interface{}) {
-	ptr := ac.alloc(int(tp.Size()))
-	r := reflect.NewAt(tp, ptr)
-	ret = r.Interface()
-	if atomic.LoadInt32(&DbgCheckPointers) == 1 {
-		if tp.Kind() == reflect.Struct {
-			ac.scanObjs = append(ac.scanObjs, r)
-		}
-		ac.knownPointers[uintptr(ptr)] = ret
-	}
-	return
 }
 
 func (ac *LinearAllocator) NewString(v string) string {
@@ -248,7 +238,7 @@ func (ac *LinearAllocator) NewMap(mapPtr interface{}) {
 	}
 	ac.maps[v.data] = struct{}{}
 
-	runtime.KeepAlive(mapPtr)
+	runtime.KeepAlive(mapPtrTemp)
 }
 
 func (ac *LinearAllocator) NewSlice(slicePtr interface{}, cap_ int) {
@@ -328,8 +318,6 @@ func (ac *LinearAllocator) SliceAppend(slicePtr interface{}, itemPtr interface{}
 			ac.knownPointers[uintptr(slice_.Data)] = slicePtrTmp
 		}
 	}
-
-	runtime.KeepAlive(slicePtr)
 }
 
 func (ac *LinearAllocator) CheckPointers() {
