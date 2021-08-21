@@ -4,6 +4,14 @@
 ## Goal
 Speed up the memory allocation and garbage collection performance.
 
+## Compare with pool
+1. more generel than pool.
+Linear allocator can allocate different types of objects.
+3. reduce the gc object scanning overhead.
+The allocator is just a few byte array.
+5. much simper and faster on recliming memores.
+No need to mannually release each object allocated from the linear allocator, just reset the allocation cursor and all is done.
+
 ## Possible Usage
 1. global memory never need to be released. (configs, global systems)
 2. temporary objects with deterministic lifetime. (buffers send to network)
