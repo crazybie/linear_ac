@@ -229,6 +229,9 @@ func Benchmark_linearAlloc(t *testing.B) {
 			}
 		}
 
+		if i%200 == 0 {
+			runtime.GC()
+		}
 		ac.Reset()
 	}
 }
@@ -269,6 +272,9 @@ func Benchmark_buildInAlloc(t *testing.B) {
 			if *d.Items[j].Id != 2+j {
 				t.Errorf("item.id")
 			}
+		}
+		if i%200 == 0 {
+			runtime.GC()
 		}
 		preventFromGc = append(preventFromGc, d)
 	}

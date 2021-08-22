@@ -66,8 +66,9 @@ for i := 0; i < n; i++ {
 ## Benchmark
 Results from benchmark tests:
 ``` 
+cpu: AMD Ryzen 5 2500U with Radeon Vega Mobile Gfx  
 Benchmark_linearAlloc
-Benchmark_linearAlloc-8    	    3890	    277651 ns/op	      27 B/op	       0 allocs/op
+Benchmark_linearAlloc-8    	    4358	    282468 ns/op	      24 B/op	       0 allocs/op
 Benchmark_buildInAlloc
-Benchmark_buildInAlloc-8   	    4744	    254372 ns/op	  112440 B/op	    6013 allocs/op
+Benchmark_buildInAlloc-8   	    3751	    875766 ns/op	  112441 B/op	    6013 allocs/op
 ```
