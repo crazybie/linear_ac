@@ -81,20 +81,23 @@ const (
 var (
 	uintptrSize = unsafe.Sizeof(uintptr(0))
 
-	boolType  = reflect.TypeOf(true)
-	intType   = reflect.TypeOf(0)
-	int32Type = reflect.TypeOf(int32(0))
-	int64Type = reflect.TypeOf(int64(0))
-	f32Type   = reflect.TypeOf(float32(0))
-	f64Type   = reflect.TypeOf(float64(0))
-	strType   = reflect.TypeOf("")
+	boolType   = reflect.TypeOf(true)
+	intType    = reflect.TypeOf(0)
+	int32Type  = reflect.TypeOf(int32(0))
+	uint32Type = reflect.TypeOf(uint32(0))
+	int64Type  = reflect.TypeOf(int64(0))
+	uint64Type = reflect.TypeOf(uint64(0))
+	f32Type    = reflect.TypeOf(float32(0))
+	f64Type    = reflect.TypeOf(float64(0))
+	strType    = reflect.TypeOf("")
 
 	reflectTypeSize = reflect.TypeOf(intType).Elem().Size()
 )
 
 type block []byte
 
-type LinearAllocator struct {
+type Allocator struct {
+	enabled       bool
 	staticBlock   [1024]byte
 	blocks        []block
 	curBlock      int
@@ -103,8 +106,10 @@ type LinearAllocator struct {
 	maps          map[unsafe.Pointer]struct{}
 }
 
-func NewLinearAllocator() (ret *LinearAllocator) {
-	ret = &LinearAllocator{}
+func NewLinearAc(enable bool) (ret *Allocator) {
+	ret = &Allocator{
+		enabled: enable,
+	}
 	ret.blocks = append(ret.blocks, ret.staticBlock[:0])
 
 	if atomic.LoadInt32(&DbgCheckPointers) == 1 {
@@ -116,9 +121,11 @@ func NewLinearAllocator() (ret *LinearAllocator) {
 	return
 }
 
-func (ac *LinearAllocator) Reset() {
+func (ac *Allocator) Reset() {
+	if !ac.enabled {
+		return
+	}
 	if atomic.LoadInt32(&DbgCheckPointers) == 1 {
-		ac.CheckPointers()
 		for k := range ac.knownPointers {
 			delete(ac.knownPointers, k)
 		}
@@ -134,32 +141,43 @@ func (ac *LinearAllocator) Reset() {
 	}
 }
 
-func (ac *LinearAllocator) New(ptrToPtr interface{}) {
+func (ac *Allocator) New(ptrToPtr interface{}) {
 	var ptrToPtrTemp interface{}
 	// store in an uintptr to cheat the escape analyser
 	p := *(*[2]uintptr)(unsafe.Pointer(&ptrToPtr))
 	*(*[2]uintptr)(unsafe.Pointer(&ptrToPtrTemp)) = p
 
+	if !ac.enabled {
+		tp := reflect.TypeOf(ptrToPtrTemp).Elem().Elem()
+		reflect.ValueOf(ptrToPtrTemp).Elem().Set(reflect.New(tp))
+		return
+	}
+
 	tp := reflect.TypeOf(ptrToPtrTemp).Elem().Elem()
-	v := ac.TypedNew(tp)
+	v := ac.typedNew(tp)
 	*(*uintptr)(unsafe.Pointer(p[1])) = (uintptr)((*emptyInterface)(unsafe.Pointer(&v)).data)
 }
 
 // New2 is slower than New due to the data copying.
-func (ac *LinearAllocator) New2(ptr interface{}) interface{} {
+// useful for migration.
+func (ac *Allocator) New2(ptr interface{}) interface{} {
 	var ptrTemp interface{}
 	// store in an uintptr to cheat the escape analyser
 	p := *(*[2]uintptr)(unsafe.Pointer(&ptr))
 	*(*[2]uintptr)(unsafe.Pointer(&ptrTemp)) = p
 
+	if !ac.enabled {
+		return ptrTemp
+	}
+
 	tp := reflect.TypeOf(ptrTemp).Elem()
-	ret := ac.TypedNew(tp)
+	ret := ac.typedNew(tp)
 	copyBytes((*emptyInterface)(unsafe.Pointer(&ptrTemp)).data, (*emptyInterface)(unsafe.Pointer(&ret)).data, int(tp.Size()))
 
 	return ret
 }
 
-func (ac *LinearAllocator) TypedNew(tp reflect.Type) (ret interface{}) {
+func (ac *Allocator) typedNew(tp reflect.Type) (ret interface{}) {
 	ptr := ac.alloc(int(tp.Size()))
 	r := reflect.NewAt(tp, ptr)
 	ret = r.Interface()
@@ -172,7 +190,7 @@ func (ac *LinearAllocator) TypedNew(tp reflect.Type) (ret interface{}) {
 	return
 }
 
-func (ac *LinearAllocator) alloc(need int) unsafe.Pointer {
+func (ac *Allocator) alloc(need int) unsafe.Pointer {
 start:
 	buf := &ac.blocks[ac.curBlock]
 	used := len(*buf)
@@ -213,7 +231,10 @@ func clearBytes(dst unsafe.Pointer, len int) {
 	}
 }
 
-func (ac *LinearAllocator) NewString(v string) string {
+func (ac *Allocator) NewString(v string) string {
+	if !ac.enabled {
+		return v
+	}
 	h := (*stringHeader)(unsafe.Pointer(&v))
 	ptr := ac.alloc(h.Len)
 	copyBytes(h.Data, ptr, h.Len)
@@ -222,11 +243,17 @@ func (ac *LinearAllocator) NewString(v string) string {
 }
 
 // NewMap use build-in allocator
-func (ac *LinearAllocator) NewMap(mapPtr interface{}) {
+func (ac *Allocator) NewMap(mapPtr interface{}) {
 	var mapPtrTemp interface{}
 	// store in an uintptr to cheat the escape analyser
 	p := *(*[2]uintptr)(unsafe.Pointer(&mapPtr))
 	*(*[2]uintptr)(unsafe.Pointer(&mapPtrTemp)) = p
+
+	if !ac.enabled {
+		tp := reflect.TypeOf(mapPtrTemp).Elem()
+		reflect.ValueOf(mapPtrTemp).Elem().Set(reflect.MakeMap(tp))
+		return
+	}
 
 	m := reflect.MakeMap(reflect.TypeOf(mapPtrTemp).Elem())
 	i := m.Interface()
@@ -241,15 +268,25 @@ func (ac *LinearAllocator) NewMap(mapPtr interface{}) {
 	runtime.KeepAlive(mapPtrTemp)
 }
 
-func (ac *LinearAllocator) NewSlice(slicePtr interface{}, cap_ int) {
+func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap_ int) {
 	var slicePtrTmp interface{}
 	// store in an uintptr to cheat the escape analyser
 	p := *(*[2]uintptr)(unsafe.Pointer(&slicePtr))
 	*(*[2]uintptr)(unsafe.Pointer(&slicePtrTmp)) = p
 
+	if !ac.enabled {
+		v := reflect.MakeSlice(reflect.TypeOf(slicePtrTmp).Elem(), len, cap_)
+		reflect.ValueOf(slicePtrTmp).Elem().Set(v)
+		return
+	}
+
 	refSlicePtrType := reflect.TypeOf(slicePtrTmp)
 	if refSlicePtrType.Kind() != reflect.Ptr || refSlicePtrType.Elem().Kind() != reflect.Slice {
 		panic(fmt.Errorf("need a pointer to slice"))
+	}
+
+	if cap_ < len {
+		cap_ = len
 	}
 
 	sliceEface := (*emptyInterface)(unsafe.Pointer(&slicePtrTmp))
@@ -257,24 +294,31 @@ func (ac *LinearAllocator) NewSlice(slicePtr interface{}, cap_ int) {
 	ptrTyp := (*ptrType)(unsafe.Pointer(sliceEface.typ))
 	sliceTyp := (*sliceType)(unsafe.Pointer(ptrTyp.elem))
 	slice_.Data = ac.alloc(cap_ * int(sliceTyp.elem.size))
-	slice_.Len = 0
+	slice_.Len = len
 	slice_.Cap = cap_
 }
 
 // SliceAppend append pointers to slice
-func (ac *LinearAllocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
+func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 	var slicePtrTmp interface{}
 	// store in an uintptr to cheat the escape analyser
 	p := *(*[2]uintptr)(unsafe.Pointer(&slicePtr))
 	*(*[2]uintptr)(unsafe.Pointer(&slicePtrTmp)) = p
+
+	if !ac.enabled {
+		s := reflect.ValueOf(slicePtrTmp).Elem()
+		v := reflect.Append(s, reflect.ValueOf(itemPtr))
+		s.Set(v)
+		return
+	}
 
 	refSlicePtrTp := reflect.TypeOf(slicePtrTmp)
 	if refSlicePtrTp.Kind() != reflect.Ptr || refSlicePtrTp.Elem().Kind() != reflect.Slice {
 		panic(fmt.Errorf("expect pointer to slice"))
 	}
 	refItemPtrTp := reflect.TypeOf(itemPtr)
-	if refItemPtrTp.Kind() != reflect.Ptr || refItemPtrTp.Elem().Kind() != reflect.Struct {
-		panic(fmt.Errorf("expect pointer to struct"))
+	if refItemPtrTp.Kind() != reflect.Ptr {
+		panic(fmt.Errorf("expect pointer as element"))
 	}
 	if refSlicePtrTp.Elem().Elem() != refItemPtrTp {
 		panic(fmt.Errorf("elem type not match with slice"))
@@ -320,7 +364,10 @@ func (ac *LinearAllocator) SliceAppend(slicePtr interface{}, itemPtr interface{}
 	}
 }
 
-func (ac *LinearAllocator) CheckPointers() {
+func (ac *Allocator) CheckPointers() {
+	if !ac.enabled {
+		return
+	}
 	for _, ptr := range ac.scanObjs {
 		if err := ac.checkRecursively(ptr); err != nil {
 			panic(err)
@@ -328,7 +375,7 @@ func (ac *LinearAllocator) CheckPointers() {
 	}
 }
 
-func (ac *LinearAllocator) checkRecursively(pe reflect.Value) error {
+func (ac *Allocator) checkRecursively(pe reflect.Value) error {
 	if pe.Kind() == reflect.Ptr {
 		if !pe.IsNil() {
 			if _, ok := ac.knownPointers[pe.Pointer()]; !ok {
@@ -378,44 +425,113 @@ func (ac *LinearAllocator) checkRecursively(pe reflect.Value) error {
 	return nil
 }
 
-func (ac *LinearAllocator) Bool(v bool) (r *bool) {
-	r = ac.TypedNew(boolType).(*bool)
+func (ac *Allocator) Bool(v bool) (r *bool) {
+	if !ac.enabled {
+		r = new(bool)
+		*r = v
+		return
+	}
+	r = ac.typedNew(boolType).(*bool)
 	*r = v
 	return
 }
 
-func (ac *LinearAllocator) Int(v int) (r *int) {
-	r = ac.TypedNew(intType).(*int)
+func (ac *Allocator) Int(v int) (r *int) {
+	if !ac.enabled {
+		r = new(int)
+		*r = v
+		return
+	}
+	r = ac.typedNew(intType).(*int)
 	*r = v
 	return
 }
 
-func (ac *LinearAllocator) Int32(v int32) (r *int32) {
-	r = ac.TypedNew(int32Type).(*int32)
+func (ac *Allocator) Int32(v int32) (r *int32) {
+	if !ac.enabled {
+		r = new(int32)
+		*r = v
+		return
+	}
+
+	r = ac.typedNew(int32Type).(*int32)
 	*r = v
 	return
 }
 
-func (ac *LinearAllocator) Int64(v int64) (r *int64) {
-	r = ac.TypedNew(int64Type).(*int64)
+func (ac *Allocator) Uint32(v uint32) (r *uint32) {
+	if !ac.enabled {
+		r = new(uint32)
+		*r = v
+		return
+	}
+	r = ac.typedNew(uint32Type).(*uint32)
 	*r = v
 	return
 }
 
-func (ac *LinearAllocator) Float32(v float32) (r *float32) {
-	r = ac.TypedNew(f32Type).(*float32)
+func (ac *Allocator) Int64(v int64) (r *int64) {
+	if !ac.enabled {
+		r = new(int64)
+		*r = v
+		return
+	}
+	r = ac.typedNew(int64Type).(*int64)
 	*r = v
 	return
 }
 
-func (ac *LinearAllocator) Float64(v float64) (r *float64) {
-	r = ac.TypedNew(f64Type).(*float64)
+func (ac *Allocator) Uint64(v uint64) (r *uint64) {
+	if !ac.enabled {
+		r = new(uint64)
+		*r = v
+		return r
+	}
+	r = ac.typedNew(uint64Type).(*uint64)
 	*r = v
 	return
 }
 
-func (ac *LinearAllocator) String(v string) (r *string) {
-	r = ac.TypedNew(strType).(*string)
+func (ac *Allocator) Float32(v float32) (r *float32) {
+	if !ac.enabled {
+		r = new(float32)
+		*r = v
+		return
+	}
+	r = ac.typedNew(f32Type).(*float32)
+	*r = v
+	return
+}
+
+func (ac *Allocator) Float64(v float64) (r *float64) {
+	if !ac.enabled {
+		r = new(float64)
+		*r = v
+		return
+	}
+	r = ac.typedNew(f64Type).(*float64)
+	*r = v
+	return
+}
+
+func (ac *Allocator) String(v string) (r *string) {
+	if !ac.enabled {
+		r = new(string)
+		*r = v
+		return
+	}
+	r = ac.typedNew(strType).(*string)
 	*r = ac.NewString(v)
 	return
+}
+
+func (ac *Allocator) EnumInt32(v int32) interface{} {
+	if !ac.enabled {
+		r := new(int32)
+		*r = v
+		return r
+	}
+	r := ac.typedNew(int32Type).(*int32)
+	*r = v
+	return r
 }

@@ -21,7 +21,7 @@ type PbData struct {
 }
 
 func Test_LinearAlloc(t *testing.T) {
-	ac := NewLinearAllocator()
+	ac := NewLinearAc(true)
 	var d *PbData
 	ac.New(&d)
 	d.Age = ac.Int(11)
@@ -61,7 +61,8 @@ func Test_LinearAlloc(t *testing.T) {
 }
 
 func Test_Check(t *testing.T) {
-	ac := NewLinearAllocator()
+	DbgCheckPointers = 1
+	ac := NewLinearAc(true)
 	defer func() {
 		if err := recover(); err == nil {
 			t.Errorf("faile to check")
@@ -86,8 +87,7 @@ func Test_WorkWithGc(t *testing.T) {
 		v [10]*int
 	}
 
-	ac := NewLinearAllocator()
-	defer ac.Reset()
+	ac := NewLinearAc(true)
 
 	var d *D
 	ac.New(&d)
@@ -107,8 +107,7 @@ func Test_WorkWithGc(t *testing.T) {
 }
 
 func Test_String(t *testing.T) {
-	ac := NewLinearAllocator()
-	defer ac.Reset()
+	ac := NewLinearAc(true)
 
 	type D struct {
 		s [5]*string
@@ -127,8 +126,7 @@ func Test_String(t *testing.T) {
 }
 
 func TestLinearAllocator_NewMap(t *testing.T) {
-	ac := NewLinearAllocator()
-	defer ac.Reset()
+	ac := NewLinearAc(true)
 
 	type D struct {
 		m map[int]*int
@@ -150,7 +148,8 @@ func TestLinearAllocator_NewMap(t *testing.T) {
 }
 
 func TestLinearAllocator_ExternalMap(t *testing.T) {
-	ac := NewLinearAllocator()
+	DbgCheckPointers = 1
+	ac := NewLinearAc(true)
 	defer func() {
 		if err := recover(); err == nil {
 			t.Errorf("faile to check")
@@ -167,16 +166,17 @@ func TestLinearAllocator_ExternalMap(t *testing.T) {
 }
 
 func TestLinearAllocator_NewSlice(t *testing.T) {
-	ac := NewLinearAllocator()
-	s := []int{}
-	ac.NewSlice(&s, 32)
-	if cap(s) != 32 {
+	ac := NewLinearAc(true)
+	s := []*int{}
+	ac.NewSlice(&s, 0, 32)
+	ac.SliceAppend(&s, ac.Int(1))
+	if cap(s) != 32 || *s[0] != 1 {
 		t.Fail()
 	}
 }
 
 func TestLinearAllocator_New2(b *testing.T) {
-	ac := NewLinearAllocator()
+	ac := NewLinearAc(true)
 	for i := 0; i < 3; i++ {
 		d := ac.New2(&PbItem{
 			Id:    ac.Int(1 + i),
@@ -188,13 +188,52 @@ func TestLinearAllocator_New2(b *testing.T) {
 		if *d.Id != 1+i {
 			b.Fail()
 		}
+		if *d.Class != 2+i {
+			b.Fail()
+		}
+		if *d.Price != 3+i {
+			b.Fail()
+		}
+		if *d.Name != "test" {
+			b.Fail()
+		}
+	}
+}
+
+func TestBuildInAllocator_All(t *testing.T) {
+	ac := NewLinearAc(false)
+	var item *PbItem
+	ac.New(&item)
+	item.Id = ac.Int(11)
+	if *item.Id != 11 {
+		t.Fail()
+	}
+	id2 := 22
+	item = ac.New2(&PbItem{Id: &id2}).(*PbItem)
+	if *item.Id != 22 {
+		t.Fail()
+	}
+	var s []*PbItem
+	ac.NewSlice(&s, 0, 3)
+	if cap(s) != 3 || len(s) != 0 {
+		t.Fail()
+	}
+	ac.SliceAppend(&s, item)
+	if len(s) != 1 || *s[0].Id != 22 {
+		t.Fail()
+	}
+	var m map[int]string
+	ac.NewMap(&m)
+	m[1] = "test"
+	if m[1] != "test" {
+		t.Fail()
 	}
 }
 
 func Benchmark_linearAlloc(t *testing.B) {
 	t.ReportAllocs()
 	DbgCheckPointers = 0
-	ac := NewLinearAllocator()
+	var ac = NewLinearAc(true)
 	defer func() {
 		DbgCheckPointers = 1
 	}()
@@ -208,11 +247,20 @@ func Benchmark_linearAlloc(t *testing.B) {
 		n := 1000
 		for j := 0; j < n; j++ {
 			var item *PbItem
-			ac.New(&item)
-			item.Id = ac.Int(2 + j)
-			item.Price = ac.Int(100 + j)
-			item.Class = ac.Int(3 + j)
-			item.Name = ac.String("name")
+			if j%2 == 0 {
+				ac.New(&item)
+				item.Id = ac.Int(2 + j)
+				item.Price = ac.Int(100 + j)
+				item.Class = ac.Int(3 + j)
+				item.Name = ac.String("name")
+			} else {
+				item = ac.New2(&PbItem{
+					Id:    ac.Int(2 + j),
+					Price: ac.Int(100 + j),
+					Class: ac.Int(3 + j),
+					Name:  ac.String("name"),
+				}).(*PbItem)
+			}
 
 			ac.SliceAppend(&d.Items, item)
 		}
