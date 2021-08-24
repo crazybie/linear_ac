@@ -29,7 +29,7 @@ type PbData struct {
 }
 
 func Test_LinearAlloc(t *testing.T) {
-	ac := NewLinearAc(true)
+	ac := NewLinearAc()
 	var d *PbData
 	ac.New(&d)
 	d.Age = ac.Int(11)
@@ -70,7 +70,7 @@ func Test_LinearAlloc(t *testing.T) {
 
 func Test_Check(t *testing.T) {
 	DbgCheckPointers = 1
-	ac := NewLinearAc(true)
+	ac := NewLinearAc()
 	defer func() {
 		if err := recover(); err == nil {
 			t.Errorf("faile to check")
@@ -95,7 +95,7 @@ func Test_WorkWithGc(t *testing.T) {
 		v [10]*int
 	}
 
-	ac := NewLinearAc(true)
+	ac := NewLinearAc()
 
 	var d *D
 	ac.New(&d)
@@ -115,7 +115,7 @@ func Test_WorkWithGc(t *testing.T) {
 }
 
 func Test_String(t *testing.T) {
-	ac := NewLinearAc(true)
+	ac := NewLinearAc()
 
 	type D struct {
 		s [5]*string
@@ -134,7 +134,7 @@ func Test_String(t *testing.T) {
 }
 
 func TestLinearAllocator_NewMap(t *testing.T) {
-	ac := NewLinearAc(true)
+	ac := NewLinearAc()
 
 	type D struct {
 		m map[int]*int
@@ -157,7 +157,7 @@ func TestLinearAllocator_NewMap(t *testing.T) {
 
 func TestLinearAllocator_ExternalMap(t *testing.T) {
 	DbgCheckPointers = 1
-	ac := NewLinearAc(true)
+	ac := NewLinearAc()
 	defer func() {
 		if err := recover(); err == nil {
 			t.Errorf("faile to check")
@@ -174,8 +174,13 @@ func TestLinearAllocator_ExternalMap(t *testing.T) {
 }
 
 func TestLinearAllocator_NewSlice(t *testing.T) {
-	ac := NewLinearAc(true)
-	s := []*int{}
+	ac := NewLinearAc()
+	s := make([]*int, 0)
+	ac.SliceAppend(&s, ac.Int(2))
+	if len(s) != 1 && *s[0] != 2 {
+		t.Fail()
+	}
+
 	ac.NewSlice(&s, 0, 32)
 	ac.SliceAppend(&s, ac.Int(1))
 	if cap(s) != 32 || *s[0] != 1 {
@@ -184,7 +189,7 @@ func TestLinearAllocator_NewSlice(t *testing.T) {
 }
 
 func TestLinearAllocator_New2(b *testing.T) {
-	ac := NewLinearAc(true)
+	ac := NewLinearAc()
 	for i := 0; i < 3; i++ {
 		d := ac.New2(&PbItem{
 			Id:    ac.Int(1 + i),
@@ -209,7 +214,7 @@ func TestLinearAllocator_New2(b *testing.T) {
 }
 
 func TestAllocator_EnumInt32(t *testing.T) {
-	ac := NewLinearAc(true)
+	ac := NewLinearAc()
 	e := EnumVal1
 	v := ac.Enum(e).(*EnumA)
 	if *v != e {
@@ -218,7 +223,7 @@ func TestAllocator_EnumInt32(t *testing.T) {
 }
 
 func TestBuildInAllocator_All(t *testing.T) {
-	ac := NewLinearAc(false)
+	ac := BuildInAc
 	var item *PbItem
 	ac.New(&item)
 	item.Id = ac.Int(11)
@@ -250,7 +255,7 @@ func TestBuildInAllocator_All(t *testing.T) {
 func Benchmark_linearAlloc(t *testing.B) {
 	t.ReportAllocs()
 	DbgCheckPointers = 0
-	var ac = NewLinearAc(true)
+	var ac = NewLinearAc()
 	defer func() {
 		DbgCheckPointers = 1
 	}()

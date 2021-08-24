@@ -73,6 +73,8 @@ var (
 	DbgCheckPointers int32 = 0
 )
 
+var BuildInAc = newLinearAc(false)
+
 const (
 	BlockSize = 1024 * 8
 	rtypeSize = unsafe.Sizeof(rtype{})
@@ -106,7 +108,11 @@ type Allocator struct {
 	maps          map[unsafe.Pointer]struct{}
 }
 
-func NewLinearAc(enable bool) (ret *Allocator) {
+func NewLinearAc() *Allocator {
+	return newLinearAc(true)
+}
+
+func newLinearAc(enable bool) (ret *Allocator) {
 	ret = &Allocator{
 		enabled: enable,
 	}
