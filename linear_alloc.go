@@ -364,6 +364,22 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 	}
 }
 
+func (ac *Allocator) EnumInt32(v interface{}) interface{} {
+	var vTemp interface{}
+	// store in an uintptr to cheat the escape analyser
+	p := *(*[2]uintptr)(unsafe.Pointer(&v))
+	*(*[2]uintptr)(unsafe.Pointer(&vTemp)) = p
+
+	if !ac.enabled {
+		r := reflect.New(reflect.TypeOf(vTemp))
+		r.Set(reflect.ValueOf(vTemp))
+		return r.Interface()
+	}
+	r := ac.typedNew(reflect.TypeOf(v))
+	*((*[2]*uintptr)(unsafe.Pointer(&r)))[1] = *(*uintptr)(unsafe.Pointer(p[1]))
+	return r
+}
+
 func (ac *Allocator) CheckPointers() {
 	if !ac.enabled {
 		return
@@ -426,112 +442,92 @@ func (ac *Allocator) checkRecursively(pe reflect.Value) error {
 }
 
 func (ac *Allocator) Bool(v bool) (r *bool) {
-	if !ac.enabled {
+	if ac.enabled {
+		r = ac.typedNew(boolType).(*bool)
+	} else {
 		r = new(bool)
-		*r = v
-		return
 	}
-	r = ac.typedNew(boolType).(*bool)
 	*r = v
 	return
 }
 
 func (ac *Allocator) Int(v int) (r *int) {
-	if !ac.enabled {
+	if ac.enabled {
+		r = ac.typedNew(intType).(*int)
+	} else {
 		r = new(int)
-		*r = v
-		return
 	}
-	r = ac.typedNew(intType).(*int)
 	*r = v
 	return
 }
 
 func (ac *Allocator) Int32(v int32) (r *int32) {
-	if !ac.enabled {
+	if ac.enabled {
+		r = ac.typedNew(int32Type).(*int32)
+	} else {
 		r = new(int32)
-		*r = v
-		return
 	}
-
-	r = ac.typedNew(int32Type).(*int32)
 	*r = v
 	return
 }
 
 func (ac *Allocator) Uint32(v uint32) (r *uint32) {
-	if !ac.enabled {
+	if ac.enabled {
+		r = ac.typedNew(uint32Type).(*uint32)
+	} else {
 		r = new(uint32)
-		*r = v
-		return
 	}
-	r = ac.typedNew(uint32Type).(*uint32)
 	*r = v
 	return
 }
 
 func (ac *Allocator) Int64(v int64) (r *int64) {
-	if !ac.enabled {
+	if ac.enabled {
+		r = ac.typedNew(int64Type).(*int64)
+	} else {
 		r = new(int64)
-		*r = v
-		return
 	}
-	r = ac.typedNew(int64Type).(*int64)
 	*r = v
 	return
 }
 
 func (ac *Allocator) Uint64(v uint64) (r *uint64) {
 	if !ac.enabled {
+		r = ac.typedNew(uint64Type).(*uint64)
+	} else {
 		r = new(uint64)
-		*r = v
-		return r
 	}
-	r = ac.typedNew(uint64Type).(*uint64)
 	*r = v
 	return
 }
 
 func (ac *Allocator) Float32(v float32) (r *float32) {
 	if !ac.enabled {
+		r = ac.typedNew(f32Type).(*float32)
+	} else {
 		r = new(float32)
-		*r = v
-		return
 	}
-	r = ac.typedNew(f32Type).(*float32)
 	*r = v
 	return
 }
 
 func (ac *Allocator) Float64(v float64) (r *float64) {
 	if !ac.enabled {
+		r = ac.typedNew(f64Type).(*float64)
+	} else {
 		r = new(float64)
-		*r = v
-		return
 	}
-	r = ac.typedNew(f64Type).(*float64)
 	*r = v
 	return
 }
 
 func (ac *Allocator) String(v string) (r *string) {
-	if !ac.enabled {
+	if ac.enabled {
+		r = ac.typedNew(strType).(*string)
+		*r = ac.NewString(v)
+	} else {
 		r = new(string)
 		*r = v
-		return
 	}
-	r = ac.typedNew(strType).(*string)
-	*r = ac.NewString(v)
 	return
-}
-
-func (ac *Allocator) EnumInt32(v int32) interface{} {
-	if !ac.enabled {
-		r := new(int32)
-		*r = v
-		return r
-	}
-	r := ac.typedNew(int32Type).(*int32)
-	*r = v
-	return r
 }

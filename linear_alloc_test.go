@@ -6,12 +6,20 @@ import (
 	"testing"
 )
 
+type EnumA int32
+
+const (
+	EnumVal1 EnumA = 1
+	EnumVal2 EnumA = 2
+)
+
 type PbItem struct {
-	Id     *int
-	Price  *int
-	Class  *int
-	Name   *string
-	Active *bool
+	Id      *int
+	Price   *int
+	Class   *int
+	Name    *string
+	Active  *bool
+	EnumVal *EnumA
 }
 
 type PbData struct {
@@ -200,6 +208,15 @@ func TestLinearAllocator_New2(b *testing.T) {
 	}
 }
 
+func TestAllocator_EnumInt32(t *testing.T) {
+	ac := NewLinearAc(true)
+	e := EnumVal1
+	v := ac.EnumInt32(e).(*EnumA)
+	if *v != e {
+		t.Fail()
+	}
+}
+
 func TestBuildInAllocator_All(t *testing.T) {
 	ac := NewLinearAc(false)
 	var item *PbItem
@@ -253,12 +270,14 @@ func Benchmark_linearAlloc(t *testing.B) {
 				item.Price = ac.Int(100 + j)
 				item.Class = ac.Int(3 + j)
 				item.Name = ac.String("name")
+				item.EnumVal = ac.EnumInt32(EnumVal2).(*EnumA)
 			} else {
 				item = ac.New2(&PbItem{
-					Id:    ac.Int(2 + j),
-					Price: ac.Int(100 + j),
-					Class: ac.Int(3 + j),
-					Name:  ac.String("name"),
+					Id:      ac.Int(2 + j),
+					Price:   ac.Int(100 + j),
+					Class:   ac.Int(3 + j),
+					Name:    ac.String("name"),
+					EnumVal: ac.EnumInt32(EnumVal2).(*EnumA),
 				}).(*PbItem)
 			}
 
@@ -291,6 +310,7 @@ func Benchmark_buildInAlloc(t *testing.B) {
 	newStr := func(v string) *string { return &v }
 	newBool := func(v bool) *bool { return &v }
 	preventFromGc := make([]*PbData, 0, t.N)
+	enum := func(v EnumA) *EnumA { return &v }
 
 	t.StartTimer()
 	for i := 0; i < t.N; i++ {
@@ -306,6 +326,7 @@ func Benchmark_buildInAlloc(t *testing.B) {
 			item.Class = newInt(3 + j)
 			item.Name = newStr("name")
 			item.Active = newBool(true)
+			item.EnumVal = enum(EnumVal2)
 
 			d.Items = append(d.Items, item)
 		}
