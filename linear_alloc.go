@@ -141,7 +141,6 @@ func (ac *Allocator) Reset() {
 	}
 }
 
-//go:nosplit
 func noescape(p interface{}) interface{} {
 	var temp interface{}
 	r := *(*[2]uintptr)(unsafe.Pointer(&p))
