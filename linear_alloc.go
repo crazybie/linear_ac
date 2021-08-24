@@ -141,30 +141,32 @@ func (ac *Allocator) Reset() {
 	}
 }
 
+//go:nosplit
+func noescape(p interface{}) interface{} {
+	var temp interface{}
+	r := *(*[2]uintptr)(unsafe.Pointer(&p))
+	*(*[2]uintptr)(unsafe.Pointer(&temp)) = r
+	return temp
+}
+
 func (ac *Allocator) New(ptrToPtr interface{}) {
-	var ptrToPtrTemp interface{}
-	// store in an uintptr to cheat the escape analyser
-	p := *(*[2]uintptr)(unsafe.Pointer(&ptrToPtr))
-	*(*[2]uintptr)(unsafe.Pointer(&ptrToPtrTemp)) = p
+	tmp := noescape(ptrToPtr)
 
 	if !ac.enabled {
-		tp := reflect.TypeOf(ptrToPtrTemp).Elem().Elem()
-		reflect.ValueOf(ptrToPtrTemp).Elem().Set(reflect.New(tp))
+		tp := reflect.TypeOf(tmp).Elem().Elem()
+		reflect.ValueOf(tmp).Elem().Set(reflect.New(tp))
 		return
 	}
 
-	tp := reflect.TypeOf(ptrToPtrTemp).Elem().Elem()
+	tp := reflect.TypeOf(tmp).Elem().Elem()
 	v := ac.typedNew(tp)
-	*(*uintptr)(unsafe.Pointer(p[1])) = (uintptr)((*emptyInterface)(unsafe.Pointer(&v)).data)
+	*(*uintptr)((*emptyInterface)(unsafe.Pointer(&tmp)).data) = (uintptr)((*emptyInterface)(unsafe.Pointer(&v)).data)
 }
 
 // New2 is slower than New due to the data copying.
 // useful for migration.
 func (ac *Allocator) New2(ptr interface{}) interface{} {
-	var ptrTemp interface{}
-	// store in an uintptr to cheat the escape analyser
-	p := *(*[2]uintptr)(unsafe.Pointer(&ptr))
-	*(*[2]uintptr)(unsafe.Pointer(&ptrTemp)) = p
+	ptrTemp := noescape(ptr)
 
 	if !ac.enabled {
 		return ptrTemp
@@ -244,10 +246,7 @@ func (ac *Allocator) NewString(v string) string {
 
 // NewMap use build-in allocator
 func (ac *Allocator) NewMap(mapPtr interface{}) {
-	var mapPtrTemp interface{}
-	// store in an uintptr to cheat the escape analyser
-	p := *(*[2]uintptr)(unsafe.Pointer(&mapPtr))
-	*(*[2]uintptr)(unsafe.Pointer(&mapPtrTemp)) = p
+	var mapPtrTemp = noescape(mapPtr)
 
 	if !ac.enabled {
 		tp := reflect.TypeOf(mapPtrTemp).Elem()
@@ -269,10 +268,7 @@ func (ac *Allocator) NewMap(mapPtr interface{}) {
 }
 
 func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap_ int) {
-	var slicePtrTmp interface{}
-	// store in an uintptr to cheat the escape analyser
-	p := *(*[2]uintptr)(unsafe.Pointer(&slicePtr))
-	*(*[2]uintptr)(unsafe.Pointer(&slicePtrTmp)) = p
+	var slicePtrTmp = noescape(slicePtr)
 
 	if !ac.enabled {
 		v := reflect.MakeSlice(reflect.TypeOf(slicePtrTmp).Elem(), len, cap_)
@@ -300,10 +296,7 @@ func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap_ int) {
 
 // SliceAppend append pointers to slice
 func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
-	var slicePtrTmp interface{}
-	// store in an uintptr to cheat the escape analyser
-	p := *(*[2]uintptr)(unsafe.Pointer(&slicePtr))
-	*(*[2]uintptr)(unsafe.Pointer(&slicePtrTmp)) = p
+	var slicePtrTmp = noescape(slicePtr)
 
 	if !ac.enabled {
 		s := reflect.ValueOf(slicePtrTmp).Elem()
@@ -364,19 +357,15 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 	}
 }
 
-func (ac *Allocator) EnumInt32(v interface{}) interface{} {
-	var vTemp interface{}
-	// store in an uintptr to cheat the escape analyser
-	p := *(*[2]uintptr)(unsafe.Pointer(&v))
-	*(*[2]uintptr)(unsafe.Pointer(&vTemp)) = p
-
+func (ac *Allocator) Enum(e interface{}) interface{} {
+	var temp = noescape(e)
 	if !ac.enabled {
-		r := reflect.New(reflect.TypeOf(vTemp))
-		r.Set(reflect.ValueOf(vTemp))
+		r := reflect.New(reflect.TypeOf(temp))
+		r.Set(reflect.ValueOf(temp))
 		return r.Interface()
 	}
-	r := ac.typedNew(reflect.TypeOf(v))
-	*((*[2]*uintptr)(unsafe.Pointer(&r)))[1] = *(*uintptr)(unsafe.Pointer(p[1]))
+	r := ac.typedNew(reflect.TypeOf(temp))
+	*((*[2]*uintptr)(unsafe.Pointer(&r)))[1] = *(*uintptr)((*emptyInterface)(unsafe.Pointer(&temp)).data)
 	return r
 }
 

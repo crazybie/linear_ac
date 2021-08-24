@@ -211,7 +211,7 @@ func TestLinearAllocator_New2(b *testing.T) {
 func TestAllocator_EnumInt32(t *testing.T) {
 	ac := NewLinearAc(true)
 	e := EnumVal1
-	v := ac.EnumInt32(e).(*EnumA)
+	v := ac.Enum(e).(*EnumA)
 	if *v != e {
 		t.Fail()
 	}
@@ -270,14 +270,14 @@ func Benchmark_linearAlloc(t *testing.B) {
 				item.Price = ac.Int(100 + j)
 				item.Class = ac.Int(3 + j)
 				item.Name = ac.String("name")
-				item.EnumVal = ac.EnumInt32(EnumVal2).(*EnumA)
+				item.EnumVal = ac.Enum(EnumVal2).(*EnumA)
 			} else {
 				item = ac.New2(&PbItem{
 					Id:      ac.Int(2 + j),
 					Price:   ac.Int(100 + j),
 					Class:   ac.Int(3 + j),
 					Name:    ac.String("name"),
-					EnumVal: ac.EnumInt32(EnumVal2).(*EnumA),
+					EnumVal: ac.Enum(EnumVal2).(*EnumA),
 				}).(*PbItem)
 			}
 
