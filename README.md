@@ -2,7 +2,7 @@
 # Linear Allocator
 
 ## Goal
-Speed up the memory allocation and garbage collection performance.
+Speed up the memory allocation and imporve the garbage collection performance.
 
 ## Compare with pool
 1. More general. The linear allocator can allocate different types of objects.
@@ -14,7 +14,7 @@ Speed up the memory allocation and garbage collection performance.
 2. Don't store the pointers of linear allocated objects after the allocator is released.
 
 
-## Possible Usecase
+## Possible Usecases
 1. Global memory never needs to be released. (configs, global systems)
 2. Temporary objects with deterministic lifetime. (buffers send to network)
 
