@@ -186,6 +186,12 @@ func TestLinearAllocator_NewSlice(t *testing.T) {
 	if cap(s) != 32 || *s[0] != 1 {
 		t.Fail()
 	}
+
+	intSlice := []int{}
+	ac.SliceAppend(&intSlice, 11)
+	if len(intSlice) != 1 || intSlice[0] != 11 {
+		t.Fail()
+	}
 }
 
 func TestLinearAllocator_New2(b *testing.T) {

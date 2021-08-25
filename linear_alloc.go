@@ -315,8 +315,8 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 		panic(fmt.Errorf("expect pointer to slice"))
 	}
 	refItemPtrTp := reflect.TypeOf(itemPtr)
-	if refItemPtrTp.Kind() != reflect.Ptr {
-		panic(fmt.Errorf("expect pointer as element"))
+	if refItemPtrTp.Size() != uintptrSize {
+		panic(fmt.Errorf("elem size not supported"))
 	}
 	if refSlicePtrTp.Elem().Elem() != refItemPtrTp {
 		panic(fmt.Errorf("elem type not match with slice"))
@@ -353,7 +353,11 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 	// append
 	if slice_.Len < slice_.Cap {
 		d := unsafe.Pointer(uintptr(slice_.Data) + sliceTyp.elem.size*uintptr(slice_.Len))
-		*(*uintptr)(d) = (uintptr)(itemEface.data)
+		if refItemPtrTp.Kind() == reflect.Ptr {
+			*(*uintptr)(d) = (uintptr)(itemEface.data)
+		} else {
+			*(*uintptr)(d) = *(*uintptr)(itemEface.data)
+		}
 		slice_.Len++
 
 		if pointerChecking {
