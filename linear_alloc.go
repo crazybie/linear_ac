@@ -170,18 +170,18 @@ func (ac *Allocator) New(ptrToPtr interface{}) {
 
 // New2 is slower than New due to the data copying.
 // useful for migration.
-func (ac *Allocator) New2(ptr interface{}) interface{} {
+func (ac *Allocator) New2(ptr interface{}) (ret interface{}) {
 	ptrTemp := noescape(ptr)
+	tp := reflect.TypeOf(ptrTemp).Elem()
 
 	if !ac.enabled {
-		return ptrTemp
+		ret = reflect.New(tp)
+	} else {
+		ret = ac.typedNew(tp)
 	}
 
-	tp := reflect.TypeOf(ptrTemp).Elem()
-	ret := ac.typedNew(tp)
 	copyBytes((*emptyInterface)(unsafe.Pointer(&ptrTemp)).data, (*emptyInterface)(unsafe.Pointer(&ret)).data, int(tp.Size()))
-
-	return ret
+	return
 }
 
 func (ac *Allocator) typedNew(tp reflect.Type) (ret interface{}) {
@@ -486,7 +486,7 @@ func (ac *Allocator) Int64(v int64) (r *int64) {
 }
 
 func (ac *Allocator) Uint64(v uint64) (r *uint64) {
-	if !ac.enabled {
+	if ac.enabled {
 		r = ac.typedNew(uint64Type).(*uint64)
 	} else {
 		r = new(uint64)
@@ -496,7 +496,7 @@ func (ac *Allocator) Uint64(v uint64) (r *uint64) {
 }
 
 func (ac *Allocator) Float32(v float32) (r *float32) {
-	if !ac.enabled {
+	if ac.enabled {
 		r = ac.typedNew(f32Type).(*float32)
 	} else {
 		r = new(float32)
@@ -506,7 +506,7 @@ func (ac *Allocator) Float32(v float32) (r *float32) {
 }
 
 func (ac *Allocator) Float64(v float64) (r *float64) {
-	if !ac.enabled {
+	if ac.enabled {
 		r = ac.typedNew(f64Type).(*float64)
 	} else {
 		r = new(float64)
