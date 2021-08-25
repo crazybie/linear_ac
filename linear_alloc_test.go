@@ -192,6 +192,23 @@ func TestLinearAllocator_NewSlice(t *testing.T) {
 	if len(intSlice) != 1 || intSlice[0] != 11 {
 		t.Fail()
 	}
+
+	byteSlice := []byte{}
+	ac.SliceAppend(&byteSlice, byte(11))
+	if len(byteSlice) != 1 || byteSlice[0] != 11 {
+		t.Fail()
+	}
+
+	type Data struct {
+		d [2]uint64
+	}
+	structSlice := []Data{}
+	d1 := uint64(0xcdcdefefcdcdefdc)
+	d2 := uint64(0xcfcdefefcdcfffde)
+	ac.SliceAppend(&structSlice, Data{d: [2]uint64{d1, d2}})
+	if len(structSlice) != 1 || structSlice[0].d[0] != d1 || structSlice[0].d[1] != d2 {
+		t.Fail()
+	}
 }
 
 func TestLinearAllocator_New2(b *testing.T) {
