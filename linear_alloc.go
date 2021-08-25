@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2020-2021 crazybie@git.com.
+// Copyright (C) 2020-2021 crazybie@github.com.
 //
 //
 // Linear Allocator
@@ -70,7 +70,7 @@ type ptrType struct {
 
 var (
 	// DbgCheckPointers checks if user allocates from build-in allocator.
-	DbgCheckPointers int32 = 0
+	DbgCheckPointers int32 = 1
 )
 
 var BuildInAc = newLinearAc(false)
@@ -406,8 +406,10 @@ func (ac *Allocator) checkRecursively(pe reflect.Value) error {
 					return fmt.Errorf("%v: %v", fieldName(i), err)
 				}
 			case reflect.Slice:
-				if _, ok := ac.knownPointers[f.Index(0).UnsafeAddr()]; !ok {
-					return fmt.Errorf("%v: unexpected external pointer: %+v", fieldName(i), f)
+				if f.Len() > 0 {
+					if _, ok := ac.knownPointers[f.Index(0).UnsafeAddr()]; !ok {
+						return fmt.Errorf("%s: unexpected external pointer: %s", fieldName(i), f.String())
+					}
 				}
 				fallthrough
 			case reflect.Array:
