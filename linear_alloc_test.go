@@ -250,6 +250,11 @@ func TestBuildInAllocator_All(t *testing.T) {
 	if m[1] != "test" {
 		t.Fail()
 	}
+	e := EnumVal1
+	v := ac.Enum(e).(*EnumA)
+	if *v != e {
+		t.Fail()
+	}
 }
 
 func Benchmark_linearAlloc(t *testing.B) {

@@ -76,7 +76,7 @@ var (
 var BuildInAc = newLinearAc(false)
 
 const (
-	BlockSize = 1024 * 8
+	BlockSize = 1024 * 4
 	rtypeSize = unsafe.Sizeof(rtype{})
 )
 
@@ -366,7 +366,7 @@ func (ac *Allocator) Enum(e interface{}) interface{} {
 	var temp = noescape(e)
 	if !ac.enabled {
 		r := reflect.New(reflect.TypeOf(temp))
-		r.Set(reflect.ValueOf(temp))
+		r.Elem().Set(reflect.ValueOf(temp))
 		return r.Interface()
 	}
 	r := ac.typedNew(reflect.TypeOf(temp))
