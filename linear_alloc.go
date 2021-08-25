@@ -104,7 +104,7 @@ type Allocator struct {
 	blocks        []block
 	curBlock      int
 	scanObjs      []reflect.Value
-	knownPointers map[uintptr]interface{}
+	knownPointers map[uintptr]struct{}
 	maps          map[unsafe.Pointer]struct{}
 }
 
@@ -119,7 +119,7 @@ func newLinearAc(enable bool) (ret *Allocator) {
 	ret.blocks = append(ret.blocks, ret.staticBlock[:0])
 
 	if atomic.LoadInt32(&DbgCheckPointers) == 1 {
-		ret.knownPointers = make(map[uintptr]interface{})
+		ret.knownPointers = make(map[uintptr]struct{})
 	}
 	if reflectTypeSize != rtypeSize {
 		panic(fmt.Errorf("golang runtime structs mismatch"))
@@ -192,7 +192,7 @@ func (ac *Allocator) typedNew(tp reflect.Type) (ret interface{}) {
 		if tp.Kind() == reflect.Struct {
 			ac.scanObjs = append(ac.scanObjs, r)
 		}
-		ac.knownPointers[uintptr(ptr)] = ret
+		ac.knownPointers[uintptr(ptr)] = struct{}{}
 	}
 	return
 }
@@ -297,6 +297,9 @@ func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap_ int) {
 	slice_.Data = ac.alloc(cap_ * int(sliceTyp.elem.size))
 	slice_.Len = len
 	slice_.Cap = cap_
+	if atomic.LoadInt32(&DbgCheckPointers) == 1 {
+		ac.knownPointers[uintptr(slice_.Data)] = struct{}{}
+	}
 }
 
 // SliceAppend append pointers to slice
@@ -354,7 +357,7 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 		slice_.Len++
 
 		if pointerChecking {
-			ac.knownPointers[uintptr(slice_.Data)] = slicePtrTmp
+			ac.knownPointers[uintptr(slice_.Data)] = struct{}{}
 		}
 	}
 }
@@ -407,7 +410,8 @@ func (ac *Allocator) checkRecursively(pe reflect.Value) error {
 				}
 			case reflect.Slice:
 				if f.Len() > 0 {
-					if _, ok := ac.knownPointers[f.Index(0).UnsafeAddr()]; !ok {
+					dataPtr := (uintptr)((*sliceHeader)(unsafe.Pointer(f.UnsafeAddr())).Data)
+					if _, ok := ac.knownPointers[dataPtr]; !ok {
 						return fmt.Errorf("%s: unexpected external pointer: %s", fieldName(i), f.String())
 					}
 				}

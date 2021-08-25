@@ -68,7 +68,7 @@ func Test_LinearAlloc(t *testing.T) {
 	ac.Reset()
 }
 
-func Test_Check(t *testing.T) {
+func Test_CheckArray(t *testing.T) {
 	DbgCheckPointers = 1
 	ac := NewLinearAc()
 	defer func() {
@@ -83,6 +83,42 @@ func Test_Check(t *testing.T) {
 	var d *D
 	ac.New(&d)
 
+	for i := 0; i < len(d.v); i++ {
+		d.v[i] = new(int)
+		*d.v[i] = i
+	}
+	ac.CheckPointers()
+}
+
+func Test_CheckInternalSlice(t *testing.T) {
+	DbgCheckPointers = 1
+	ac := NewLinearAc()
+
+	type D struct {
+		v []int
+	}
+	var d *D
+	ac.New(&d)
+	ac.NewSlice(&d.v, 1, 0)
+	ac.CheckPointers()
+}
+
+func Test_CheckExternalSlice(t *testing.T) {
+	DbgCheckPointers = 1
+	ac := NewLinearAc()
+	defer func() {
+		if err := recover(); err == nil {
+			t.Errorf("faile to check")
+		}
+	}()
+
+	type D struct {
+		v []*int
+	}
+	var d *D
+	ac.New(&d)
+
+	d.v = make([]*int, 3)
 	for i := 0; i < len(d.v); i++ {
 		d.v[i] = new(int)
 		*d.v[i] = i
@@ -174,6 +210,7 @@ func TestLinearAllocator_ExternalMap(t *testing.T) {
 }
 
 func TestLinearAllocator_NewSlice(t *testing.T) {
+	DbgCheckPointers = 1
 	ac := NewLinearAc()
 	s := make([]*int, 0)
 	ac.SliceAppend(&s, ac.Int(2))
@@ -209,6 +246,18 @@ func TestLinearAllocator_NewSlice(t *testing.T) {
 	if len(structSlice) != 1 || structSlice[0].d[0] != d1 || structSlice[0].d[1] != d2 {
 		t.Fail()
 	}
+
+	f := func() []int {
+		var r []int
+		ac.NewSlice(&r, 0, 1)
+		ac.SliceAppend(&r, 1)
+		return r
+	}
+	r := f()
+	if len(r) != 1 {
+		t.Errorf("return slice")
+	}
+	ac.CheckPointers()
 }
 
 func TestLinearAllocator_New2(b *testing.T) {
