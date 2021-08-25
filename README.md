@@ -15,8 +15,8 @@ Speed up the memory allocation and imporve the garbage collection performance.
 
 
 ## Possible Usecases
-1. Global memory never needs to be released. (configs, global systems)
-2. Temporary objects with deterministic lifetime. (buffers send to network)
+1. Global memory never needs to be released. (configs, global states)
+2. Temporary objects with deterministic lifetime. (protobuf objects send to network)
 
 
 
