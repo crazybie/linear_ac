@@ -20,9 +20,6 @@ Speed up the memory allocation and imporve the garbage collection performance.
 
 
 
-## TODO:
-1. SliceAppend support value type as the element.
-
 ## Usage:
 
 ```go
