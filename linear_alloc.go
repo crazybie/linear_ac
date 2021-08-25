@@ -343,6 +343,7 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 
 		if pointerChecking {
 			delete(ac.knownPointers, uintptr(pre.Data))
+			ac.knownPointers[uintptr(slice_.Data)] = struct{}{}
 		}
 	}
 
@@ -355,10 +356,6 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 			copyBytes(itemEface.data, d, int(sliceTyp.elem.size))
 		}
 		slice_.Len++
-
-		if pointerChecking {
-			ac.knownPointers[uintptr(slice_.Data)] = struct{}{}
-		}
 	}
 }
 
