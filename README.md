@@ -7,7 +7,7 @@ Speed up the memory allocation and imporve the garbage collection performance.
 ## Compare with pool
 1. More general. The linear allocator can allocate different types of objects.
 2. Greatly reduce the GC object scanning overhead. Linear allocator is just a few byte arrays. 
-3. Much simpler and faster on reclaiming memories. No need to manually release each object allocated from the linear allocator, just reset the allocation cursor and everything is done.
+3. Much simpler and faster on reclaiming memories. No need to manually release each object allocated from the linear allocator back, just reset the allocation cursor and everything is done.
 
 ## Limitations
 1. Don't assign memories allocated from the build-in allocator to linear allocated objects.
@@ -15,8 +15,8 @@ Speed up the memory allocation and imporve the garbage collection performance.
 
 
 ## Possible Usecases
-1. Global memory never needs to be released. (configs, global systems)
-2. Temporary objects with deterministic lifetime. (buffers send to network)
+1. Global memory never needs to be released. (configs, global states)
+2. Temporary objects with deterministic lifetime. (protobuf objects send to network)
 
 
 
