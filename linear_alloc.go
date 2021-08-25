@@ -175,7 +175,7 @@ func (ac *Allocator) New2(ptr interface{}) (ret interface{}) {
 	tp := reflect.TypeOf(ptrTemp).Elem()
 
 	if !ac.enabled {
-		ret = reflect.New(tp)
+		ret = reflect.New(tp).Interface()
 	} else {
 		ret = ac.typedNew(tp)
 	}
@@ -211,7 +211,7 @@ start:
 		goto start
 	}
 	*buf = (*buf)[:used+need]
-	ptr := unsafe.Pointer(&(*buf)[used])
+	ptr := unsafe.Pointer((uintptr)((*sliceHeader)(unsafe.Pointer(buf)).Data) + uintptr(used))
 	clearBytes(ptr, need)
 	return ptr
 }
