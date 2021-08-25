@@ -2,7 +2,7 @@
 # Linear Allocator
 
 ## Goal
-Speed up the memory allocation and imporve the garbage collection performance.
+Speed up the memory allocation and improve the garbage collection performance.
 
 ## Compare with pool
 1. More general. The linear allocator can allocate different types of objects.
