@@ -1,5 +1,5 @@
 
-# Linear Allocator
+# Linear Allocator for Golang
 
 ## Goal
 Speed up the memory allocation and improve the garbage collection performance, espacially for applications heavily rely on dynamic memory allocations.
