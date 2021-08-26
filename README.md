@@ -2,7 +2,7 @@
 # Linear Allocator
 
 ## Goal
-Speed up the memory allocation and improve the garbage collection performance for applications heavily rely on dynamic memory allocations.
+Speed up the memory allocation and improve the garbage collection performance, espacially for applications heavily rely on dynamic memory allocations.
 
 ## Possible Usecases
 1. Global memory never needs to be released. (configs, global states)
