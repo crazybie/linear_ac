@@ -14,8 +14,8 @@ Speed up the memory allocation and improve the GC performance, espacially for dy
 3. Much simpler and faster on reclaiming memories. No need to manually release every object back, just reset the allocation cursor.
 
 ## Limitations
-1. Don't store pointers of objects allocated from the build-in allocator in linear allocated objects. (There's a debug flag for checking external pointers)
-2. Don't store and use the pointers of linear allocated objects after the allocator is released.
+1. Don't store the pointers of build-in allocated objects into linear allocated objects. (There's a debug flag for checking external pointers)
+2. Don't store and use the pointers of linear allocated objects after the allocator is reset or released.
 
 
 
