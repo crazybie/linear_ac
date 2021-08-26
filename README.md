@@ -2,7 +2,7 @@
 # Linear Allocator for Golang
 
 ## Goal
-Speed up the memory allocation and improve the garbage collection performance, espacially for applications heavily rely on dynamic memory allocations.
+Speed up the memory allocation and improve the GC performance, espacially for applications heavily rely on dynamic memory allocations.
 
 ## Possible Usecases
 1. Global memory never needs to be released. (configs, global states)
@@ -10,8 +10,8 @@ Speed up the memory allocation and improve the garbage collection performance, e
 
 ## Compare with pool
 1. More general. The linear allocator can allocate various type of objects.
-2. Greatly reduce the GC object scanning overhead. Linear allocator is just a few byte, but GC will allways scan pools. 
-3. Much simpler and faster on reclaiming memories. No need to manually release object allocated from the linear allocator back, just reset the allocation cursor and everything is done.
+2. Greatly reduce the object scanning presure of GC. Linear allocator is just a few byte arrays internally, but pool is normal container allways need to be scanned. 
+3. Much simpler and faster on reclaiming memories. No need to manually release every object back, just reset the allocation cursor.
 
 ## Limitations
 1. Don't store pointers of objects allocated from the build-in allocator in linear allocated objects. (There's a debug flag for checking external pointers)
