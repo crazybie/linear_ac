@@ -4,23 +4,22 @@
 ## Goal
 Speed up the memory allocation and improve the garbage collection performance.
 
-## Compare with pool
-1. More general. The linear allocator can allocate different types of objects.
-2. Greatly reduce the GC object scanning overhead. Linear allocator is just a few byte arrays. 
-3. Much simpler and faster on reclaiming memories. No need to manually release each object allocated from the linear allocator back, just reset the allocation cursor and everything is done.
-
-## Limitations
-1. Don't assign memories allocated from the build-in allocator to linear allocated objects.
-2. Don't store the pointers of linear allocated objects after the allocator is released.
-
-
 ## Possible Usecases
 1. Global memory never needs to be released. (configs, global states)
-2. Temporary objects with deterministic lifetime. (protobuf objects send to network)
+2. Massive temporary objects with deterministic lifetime. (protobuf objects send to network)
+
+## Compare with pool
+1. More general. The linear allocator can allocate different types of objects.
+2. Greatly reduce the GC object scanning overhead. Linear allocator is just a few byte, but GC will allways scan pools. 
+3. Much simpler and faster on reclaiming memories. No need to manually release object allocated from the linear allocator back, just reset the allocation cursor and everything is done.
+
+## Limitations
+1. Don't store pointers of objects allocated from the build-in allocator in linear allocated objects. (There's a debug flag for checking external pointers)
+2. Don't store and use the pointers of linear allocated objects after the allocator is released.
 
 
 
-## Usage:
+## Usage
 
 ```go
 type PbItem struct {
@@ -58,6 +57,7 @@ for i := 0; i < n; i++ {
 	ac.SliceAppend(&d.Items, item)
 }
 
+ac.Reset()
 ```
 
 ## Benchmark
