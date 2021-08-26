@@ -5,7 +5,7 @@
 Speed up the memory allocation and improve the GC performance, espacially for dynamic memory heavy applications.
 
 ## Possible Usecases
-1. Global memory never needs to be released. (configs, global states)
+1. Large global memory never needs to be released. (configs, global states)
 2. Massive temporary objects with deterministic lifetime. (protobuf objects send to network)
 
 ## Compare with pool
