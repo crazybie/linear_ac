@@ -2,7 +2,7 @@
 # Linear Allocator for Golang
 
 ## Goal
-Speed up the memory allocation and improve the GC performance, espacially for applications heavily rely on dynamic memory allocations.
+Speed up the memory allocation and improve the GC performance, espacially for dynamic memory heavy applications.
 
 ## Possible Usecases
 1. Global memory never needs to be released. (configs, global states)
