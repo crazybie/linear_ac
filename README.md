@@ -5,7 +5,7 @@
 Speed up the memory allocation and improve the GC performance, espacially for dynamic memory heavy applications.
 
 ## Possible Usecases
-1. Large amount of global memory never needs to be released. (configs, global states)
+1. Large amount of global memory never needs to be released. (configs, readonly asset like navmesh)
 2. Massive temporary objects with deterministic lifetime. (protobuf objects send to network)
 
 ## Compare with pool
