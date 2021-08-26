@@ -8,7 +8,7 @@ Speed up the memory allocation and improve the GC performance, espacially for dy
 1. Large amount of memory never needs to be released. (global configs, readonly assets like navmesh)
 2. Massive temporary objects with deterministic lifetime. (protobuf objects send to network)
 
-## Compare with pool
+## Advantages over pool
 Linear allocator:
 1. Can greatly reduce the object scanning presure of GC. Linear allocator is just a few byte arrays internally, but pool is normal container allways need to be scanned fully. 
 2. More general. Linear allocator can allocate various type of objects.
