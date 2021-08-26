@@ -9,7 +9,8 @@ Speed up the memory allocation and improve the GC performance, espacially for dy
 2. Massive temporary objects with deterministic lifetime. (protobuf objects send to network)
 
 ## Compare with pool
-1. Greatly reduce the object scanning presure of GC. Linear allocator is just a few byte arrays internally, but pool is normal container allways need to be scanned fully. 
+Linear allocator:
+1. Can greatly reduce the object scanning presure of GC. Linear allocator is just a few byte arrays internally, but pool is normal container allways need to be scanned fully. 
 2. More general. The linear allocator can allocate various type of objects.
 3. Much simpler and faster on reclaiming memories. No need to manually release every object back, just reset the allocation cursor.
 4. Cheaper. Linear allocator do allocations on-demond like pool, but can be throw awaly like temporary object if you don't want to reuse it.
