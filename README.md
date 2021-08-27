@@ -11,27 +11,11 @@ Speed up the memory allocation and improve the GC performance, especially for dy
 ## Advantages over pool
 Linear allocator:
 
-1. Can greatly reduce the object scanning pressure of GC. 
-
-   Linear allocator is just a few byte arrays internally, but pool is normal container always need to be scanned fully.
-
-2. More general. 
-
-   Linear allocator can allocate various type of objects.
-
-3. Much simpler and faster on reclaiming memories. 
-
-   No need to manually release every object back, just reset the allocation cursor.
-
-4. Cheaper. 
-
-   Linear allocator do allocations on-demand like pool, but can be thrown away like temporary object if you don't want to reuse it. 
-    
-    If the linear allocator is not escape to the heap and 1k memory is enough, allocations will be handled on stack with no heap allocations at all.   
-
-6. Memory efficient. 
-
-   Memories are more compact, cpu cache friendly. 
+1. Can greatly reduce the object scanning pressure of GC. Linear allocator is just a few byte arrays internally, but pool is normal container always need to be scanned fully.
+2. More general. Linear allocator can allocate various type of objects.
+3. Much simpler and faster on reclaiming memories. No need to manually release every object back, just reset the allocation cursor.
+4. Cheaper. Linear allocator do allocations on-demand like pool, but can be thrown away like temporary object if you don't want to reuse it. 
+5. Memory efficient. Memories are more compact, cpu cache friendly. 
 
 ## Limitations
 1. Don't store the pointers of build-in allocated objects into linear allocated objects. (There's a debug flag for checking external pointers)
