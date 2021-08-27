@@ -29,7 +29,7 @@ type PbData struct {
 }
 
 func Test_LinearAlloc(t *testing.T) {
-	ac := NewLinearAc()
+	ac := Get()
 	var d *PbData
 	ac.New(&d)
 	d.Age = ac.Int(11)
@@ -66,11 +66,12 @@ func Test_LinearAlloc(t *testing.T) {
 		}
 	}
 	ac.Reset()
+	ac.Release()
 }
 
 func Test_CheckArray(t *testing.T) {
 	DbgCheckPointers = true
-	ac := NewLinearAc()
+	ac := Get()
 	defer func() {
 		if err := recover(); err == nil {
 			t.Errorf("faile to check")
@@ -88,11 +89,12 @@ func Test_CheckArray(t *testing.T) {
 		*d.v[i] = i
 	}
 	ac.CheckPointers()
+	ac.Release()
 }
 
 func Test_CheckInternalSlice(t *testing.T) {
 	DbgCheckPointers = true
-	ac := NewLinearAc()
+	ac := Get()
 
 	type D struct {
 		v []int
@@ -101,11 +103,12 @@ func Test_CheckInternalSlice(t *testing.T) {
 	ac.New(&d)
 	ac.NewSlice(&d.v, 1, 0)
 	ac.CheckPointers()
+	ac.Release()
 }
 
 func Test_CheckExternalSlice(t *testing.T) {
 	DbgCheckPointers = true
-	ac := NewLinearAc()
+	ac := Get()
 	defer func() {
 		if err := recover(); err == nil {
 			t.Errorf("faile to check")
@@ -124,6 +127,7 @@ func Test_CheckExternalSlice(t *testing.T) {
 		*d.v[i] = i
 	}
 	ac.CheckPointers()
+	ac.Release()
 }
 
 func Test_WorkWithGc(t *testing.T) {
@@ -131,7 +135,7 @@ func Test_WorkWithGc(t *testing.T) {
 		v [10]*int
 	}
 
-	ac := NewLinearAc()
+	ac := Get()
 
 	var d *D
 	ac.New(&d)
@@ -148,10 +152,11 @@ func Test_WorkWithGc(t *testing.T) {
 			t.Errorf("int %v is gced", i)
 		}
 	}
+	ac.Release()
 }
 
 func Test_String(t *testing.T) {
-	ac := NewLinearAc()
+	ac := Get()
 
 	type D struct {
 		s [5]*string
@@ -167,10 +172,11 @@ func Test_String(t *testing.T) {
 			t.Errorf("elem %v is gced", i)
 		}
 	}
+	ac.Release()
 }
 
 func TestLinearAllocator_NewMap(t *testing.T) {
-	ac := NewLinearAc()
+	ac := Get()
 
 	type D struct {
 		m map[int]*int
@@ -189,11 +195,12 @@ func TestLinearAllocator_NewMap(t *testing.T) {
 			t.Fail()
 		}
 	}
+	ac.Release()
 }
 
 func TestLinearAllocator_ExternalMap(t *testing.T) {
 	DbgCheckPointers = true
-	ac := NewLinearAc()
+	ac := Get()
 	defer func() {
 		if err := recover(); err == nil {
 			t.Errorf("faile to check")
@@ -207,11 +214,12 @@ func TestLinearAllocator_ExternalMap(t *testing.T) {
 	ac.New(&d)
 	d.m = make(map[int]*int)
 	ac.CheckPointers()
+	ac.Release()
 }
 
 func TestLinearAllocator_NewSlice(t *testing.T) {
 	DbgCheckPointers = true
-	ac := NewLinearAc()
+	ac := Get()
 	s := make([]*int, 0)
 	ac.SliceAppend(&s, ac.Int(2))
 	if len(s) != 1 && *s[0] != 2 {
@@ -258,10 +266,11 @@ func TestLinearAllocator_NewSlice(t *testing.T) {
 		t.Errorf("return slice")
 	}
 	ac.CheckPointers()
+	ac.Release()
 }
 
 func TestLinearAllocator_New2(b *testing.T) {
-	ac := NewLinearAc()
+	ac := Get()
 	for i := 0; i < 3; i++ {
 		d := ac.New2(&PbItem{
 			Id:    ac.Int(1 + i),
@@ -283,15 +292,17 @@ func TestLinearAllocator_New2(b *testing.T) {
 			b.Fail()
 		}
 	}
+	ac.Release()
 }
 
 func TestAllocator_EnumInt32(t *testing.T) {
-	ac := NewLinearAc()
+	ac := Get()
 	e := EnumVal1
 	v := ac.Enum(e).(*EnumA)
 	if *v != e {
 		t.Fail()
 	}
+	ac.Release()
 }
 
 func TestBuildInAllocator_All(t *testing.T) {
@@ -327,12 +338,13 @@ func TestBuildInAllocator_All(t *testing.T) {
 	if *v != e {
 		t.Fail()
 	}
+	ac.Release()
 }
 
 func Benchmark_linearAlloc(t *testing.B) {
 	t.ReportAllocs()
 	DbgCheckPointers = false
-	var ac = NewLinearAc()
+	var ac = Get()
 	defer func() {
 		DbgCheckPointers = true
 	}()
@@ -383,6 +395,7 @@ func Benchmark_linearAlloc(t *testing.B) {
 		}
 		ac.Reset()
 	}
+	ac.Release()
 }
 
 func Benchmark_buildInAlloc(t *testing.B) {

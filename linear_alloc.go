@@ -14,6 +14,7 @@ import (
 	"math"
 	"reflect"
 	"runtime"
+	"sync"
 	"unsafe"
 )
 
@@ -71,7 +72,25 @@ type Allocator struct {
 	maps          map[unsafe.Pointer]struct{}
 }
 
-func NewLinearAc() *Allocator {
+var pool = sync.Pool{
+	New: func() interface{} {
+		return newLinearAc()
+	},
+}
+
+func Get() *Allocator {
+	return pool.Get().(*Allocator)
+}
+
+func (ac *Allocator) Release() {
+	if ac == BuildInAc {
+		return
+	}
+	ac.Reset()
+	pool.Put(ac)
+}
+
+func newLinearAc() *Allocator {
 	ac := &Allocator{
 		disabled: DbgDisableLinearAc,
 		chunks:   []chunk{make(chunk, 0, ChunkSize)},
