@@ -69,7 +69,7 @@ func Test_LinearAlloc(t *testing.T) {
 }
 
 func Test_CheckArray(t *testing.T) {
-	DbgCheckPointers = 1
+	DbgCheckPointers = true
 	ac := NewLinearAc()
 	defer func() {
 		if err := recover(); err == nil {
@@ -91,7 +91,7 @@ func Test_CheckArray(t *testing.T) {
 }
 
 func Test_CheckInternalSlice(t *testing.T) {
-	DbgCheckPointers = 1
+	DbgCheckPointers = true
 	ac := NewLinearAc()
 
 	type D struct {
@@ -104,7 +104,7 @@ func Test_CheckInternalSlice(t *testing.T) {
 }
 
 func Test_CheckExternalSlice(t *testing.T) {
-	DbgCheckPointers = 1
+	DbgCheckPointers = true
 	ac := NewLinearAc()
 	defer func() {
 		if err := recover(); err == nil {
@@ -192,7 +192,7 @@ func TestLinearAllocator_NewMap(t *testing.T) {
 }
 
 func TestLinearAllocator_ExternalMap(t *testing.T) {
-	DbgCheckPointers = 1
+	DbgCheckPointers = true
 	ac := NewLinearAc()
 	defer func() {
 		if err := recover(); err == nil {
@@ -210,7 +210,7 @@ func TestLinearAllocator_ExternalMap(t *testing.T) {
 }
 
 func TestLinearAllocator_NewSlice(t *testing.T) {
-	DbgCheckPointers = 1
+	DbgCheckPointers = true
 	ac := NewLinearAc()
 	s := make([]*int, 0)
 	ac.SliceAppend(&s, ac.Int(2))
@@ -331,10 +331,10 @@ func TestBuildInAllocator_All(t *testing.T) {
 
 func Benchmark_linearAlloc(t *testing.B) {
 	t.ReportAllocs()
-	DbgCheckPointers = 0
+	DbgCheckPointers = false
 	var ac = NewLinearAc()
 	defer func() {
-		DbgCheckPointers = 1
+		DbgCheckPointers = true
 	}()
 	t.StartTimer()
 

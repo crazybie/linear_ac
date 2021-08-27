@@ -14,17 +14,19 @@ import (
 	"math"
 	"reflect"
 	"runtime"
-	"sync/atomic"
 	"unsafe"
 )
 
-///////////////////////////////////////////////////////////////////
-// WARNING:
-// The following structs must be matched with
-// the version from the current golang runtime.
-///////////////////////////////////////////////////////////////////
+const (
+	BlockSize = 1024 * 4
+)
 
-/// MatchWithGolangRuntime Start
+var (
+	// DbgCheckPointers checks if user allocates from build-in allocator.
+	DbgCheckPointers = true
+
+	DbgEnableLinearAc = true
+)
 
 type sliceHeader struct {
 	Data unsafe.Pointer
@@ -37,48 +39,12 @@ type stringHeader struct {
 	Len  int
 }
 
-type rtype struct {
-	size       uintptr
-	ptrdata    uintptr
-	hash       uint32
-	tflag      uint8
-	align      uint8
-	fieldAlign uint8
-	kind       uint8
-	equal      func(unsafe.Pointer, unsafe.Pointer) bool
-	gcdata     *byte
-	str        int32
-	ptrToThis  int32
-}
-
 type emptyInterface struct {
-	typ  *rtype
+	typ  unsafe.Pointer
 	data unsafe.Pointer
 }
 
-type sliceType struct {
-	rtype
-	elem *rtype
-}
-
-type ptrType struct {
-	rtype
-	elem *rtype
-}
-
-/// MatchWithGolangRuntime End
-
-var (
-	// DbgCheckPointers checks if user allocates from build-in allocator.
-	DbgCheckPointers int32 = 1
-)
-
 var BuildInAc = newLinearAc(false)
-
-const (
-	BlockSize = 1024 * 4
-	rtypeSize = unsafe.Sizeof(rtype{})
-)
 
 var (
 	uintptrSize = unsafe.Sizeof(uintptr(0))
@@ -92,8 +58,6 @@ var (
 	f32Type    = reflect.TypeOf(float32(0))
 	f64Type    = reflect.TypeOf(float64(0))
 	strType    = reflect.TypeOf("")
-
-	reflectTypeSize = reflect.TypeOf(intType).Elem().Size()
 )
 
 type block []byte
@@ -109,7 +73,7 @@ type Allocator struct {
 }
 
 func NewLinearAc() *Allocator {
-	return newLinearAc(true)
+	return newLinearAc(DbgEnableLinearAc)
 }
 
 func newLinearAc(enable bool) (ret *Allocator) {
@@ -117,12 +81,8 @@ func newLinearAc(enable bool) (ret *Allocator) {
 		enabled: enable,
 	}
 	ret.blocks = append(ret.blocks, ret.staticBlock[:0])
-
-	if atomic.LoadInt32(&DbgCheckPointers) == 1 {
+	if DbgCheckPointers {
 		ret.knownPointers = make(map[uintptr]struct{})
-	}
-	if reflectTypeSize != rtypeSize {
-		panic(fmt.Errorf("golang runtime structs mismatch"))
 	}
 	return
 }
@@ -131,10 +91,9 @@ func (ac *Allocator) Reset() {
 	if !ac.enabled {
 		return
 	}
-	if atomic.LoadInt32(&DbgCheckPointers) == 1 {
-		for k := range ac.knownPointers {
-			delete(ac.knownPointers, k)
-		}
+
+	if DbgCheckPointers {
+		ac.knownPointers = map[uintptr]struct{}{}
 		ac.scanObjs = ac.scanObjs[:0]
 	}
 
@@ -188,7 +147,7 @@ func (ac *Allocator) typedNew(tp reflect.Type, zero bool) (ret interface{}) {
 	ptr := ac.alloc(int(tp.Size()), zero)
 	r := reflect.NewAt(tp, ptr)
 	ret = r.Interface()
-	if atomic.LoadInt32(&DbgCheckPointers) == 1 {
+	if DbgCheckPointers {
 		if tp.Kind() == reflect.Struct {
 			ac.scanObjs = append(ac.scanObjs, ret)
 		}
@@ -294,12 +253,10 @@ func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap_ int) {
 
 	sliceEface := (*emptyInterface)(unsafe.Pointer(&slicePtrTmp))
 	slice_ := (*sliceHeader)(sliceEface.data)
-	ptrTyp := (*ptrType)(unsafe.Pointer(sliceEface.typ))
-	sliceTyp := (*sliceType)(unsafe.Pointer(ptrTyp.elem))
-	slice_.Data = ac.alloc(cap_*int(sliceTyp.elem.size), false)
+	slice_.Data = ac.alloc(cap_*int(refSlicePtrType.Elem().Elem().Size()), false)
 	slice_.Len = len
 	slice_.Cap = cap_
-	if atomic.LoadInt32(&DbgCheckPointers) == 1 {
+	if DbgCheckPointers {
 		ac.knownPointers[uintptr(slice_.Data)] = struct{}{}
 	}
 }
@@ -326,11 +283,8 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 
 	sliceEface := (*emptyInterface)(unsafe.Pointer(&slicePtrTmp))
 	slice_ := (*sliceHeader)(sliceEface.data)
-	ptrTyp := (*ptrType)(unsafe.Pointer(sliceEface.typ))
-	sliceTyp := (*sliceType)(unsafe.Pointer(ptrTyp.elem))
 	itemEface := (*emptyInterface)(unsafe.Pointer(&itemPtr))
-	elemSz := int(sliceTyp.elem.size)
-	pointerChecking := atomic.LoadInt32(&DbgCheckPointers) == 1
+	elemSz := int(refItemPtrTp.Size())
 
 	// grow
 	if slice_.Len >= slice_.Cap {
@@ -343,7 +297,7 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 		copyBytes(pre.Data, slice_.Data, pre.Len*elemSz)
 		slice_.Len = pre.Len
 
-		if pointerChecking {
+		if DbgCheckPointers {
 			delete(ac.knownPointers, uintptr(pre.Data))
 			ac.knownPointers[uintptr(slice_.Data)] = struct{}{}
 		}
@@ -351,11 +305,11 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 
 	// append
 	if slice_.Len < slice_.Cap {
-		d := unsafe.Pointer(uintptr(slice_.Data) + sliceTyp.elem.size*uintptr(slice_.Len))
+		d := unsafe.Pointer(uintptr(slice_.Data) + uintptr(elemSz)*uintptr(slice_.Len))
 		if refItemPtrTp.Kind() == reflect.Ptr {
 			*(*uintptr)(d) = (uintptr)(itemEface.data)
 		} else {
-			copyBytes(itemEface.data, d, int(sliceTyp.elem.size))
+			copyBytes(itemEface.data, d, elemSz)
 		}
 		slice_.Len++
 	}
