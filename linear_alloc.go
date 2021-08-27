@@ -164,7 +164,7 @@ func (ac *Allocator) New(ptrToPtr interface{}) {
 	}
 
 	tp := reflect.TypeOf(tmp).Elem().Elem()
-	v := ac.typedNew(tp)
+	v := ac.typedNew(tp, true)
 	*(*uintptr)((*emptyInterface)(unsafe.Pointer(&tmp)).data) = (uintptr)((*emptyInterface)(unsafe.Pointer(&v)).data)
 }
 
@@ -177,15 +177,15 @@ func (ac *Allocator) New2(ptr interface{}) (ret interface{}) {
 	if !ac.enabled {
 		ret = reflect.New(tp).Interface()
 	} else {
-		ret = ac.typedNew(tp)
+		ret = ac.typedNew(tp, false)
 	}
 
 	copyBytes((*emptyInterface)(unsafe.Pointer(&ptrTemp)).data, (*emptyInterface)(unsafe.Pointer(&ret)).data, int(tp.Size()))
 	return
 }
 
-func (ac *Allocator) typedNew(tp reflect.Type) (ret interface{}) {
-	ptr := ac.alloc(int(tp.Size()))
+func (ac *Allocator) typedNew(tp reflect.Type, zero bool) (ret interface{}) {
+	ptr := ac.alloc(int(tp.Size()), zero)
 	r := reflect.NewAt(tp, ptr)
 	ret = r.Interface()
 	if atomic.LoadInt32(&DbgCheckPointers) == 1 {
@@ -197,7 +197,7 @@ func (ac *Allocator) typedNew(tp reflect.Type) (ret interface{}) {
 	return
 }
 
-func (ac *Allocator) alloc(need int) unsafe.Pointer {
+func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 start:
 	buf := &ac.blocks[ac.curBlock]
 	used := len(*buf)
@@ -212,7 +212,9 @@ start:
 	}
 	*buf = (*buf)[:used+need]
 	ptr := unsafe.Pointer((uintptr)((*sliceHeader)(unsafe.Pointer(buf)).Data) + uintptr(used))
-	clearBytes(ptr, need)
+	if zero {
+		clearBytes(ptr, need)
+	}
 	return ptr
 }
 
@@ -243,7 +245,7 @@ func (ac *Allocator) NewString(v string) string {
 		return v
 	}
 	h := (*stringHeader)(unsafe.Pointer(&v))
-	ptr := ac.alloc(h.Len)
+	ptr := ac.alloc(h.Len, false)
 	copyBytes(h.Data, ptr, h.Len)
 	h.Data = ptr
 	return v
@@ -294,7 +296,7 @@ func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap_ int) {
 	slice_ := (*sliceHeader)(sliceEface.data)
 	ptrTyp := (*ptrType)(unsafe.Pointer(sliceEface.typ))
 	sliceTyp := (*sliceType)(unsafe.Pointer(ptrTyp.elem))
-	slice_.Data = ac.alloc(cap_ * int(sliceTyp.elem.size))
+	slice_.Data = ac.alloc(cap_*int(sliceTyp.elem.size), false)
 	slice_.Len = len
 	slice_.Cap = cap_
 	if atomic.LoadInt32(&DbgCheckPointers) == 1 {
@@ -337,7 +339,7 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 		if slice_.Cap == 0 {
 			slice_.Cap = 1
 		}
-		slice_.Data = ac.alloc(slice_.Cap * elemSz)
+		slice_.Data = ac.alloc(slice_.Cap*elemSz, false)
 		copyBytes(pre.Data, slice_.Data, pre.Len*elemSz)
 		slice_.Len = pre.Len
 
@@ -366,7 +368,7 @@ func (ac *Allocator) Enum(e interface{}) interface{} {
 		r.Elem().Set(reflect.ValueOf(temp))
 		return r.Interface()
 	}
-	r := ac.typedNew(reflect.TypeOf(temp))
+	r := ac.typedNew(reflect.TypeOf(temp), false)
 	*((*[2]*uintptr)(unsafe.Pointer(&r)))[1] = *(*uintptr)((*emptyInterface)(unsafe.Pointer(&temp)).data)
 	return r
 }
@@ -437,7 +439,7 @@ func (ac *Allocator) checkRecursively(pe reflect.Value) error {
 
 func (ac *Allocator) Bool(v bool) (r *bool) {
 	if ac.enabled {
-		r = ac.typedNew(boolType).(*bool)
+		r = ac.typedNew(boolType, false).(*bool)
 	} else {
 		r = new(bool)
 	}
@@ -447,7 +449,7 @@ func (ac *Allocator) Bool(v bool) (r *bool) {
 
 func (ac *Allocator) Int(v int) (r *int) {
 	if ac.enabled {
-		r = ac.typedNew(intType).(*int)
+		r = ac.typedNew(intType, false).(*int)
 	} else {
 		r = new(int)
 	}
@@ -457,7 +459,7 @@ func (ac *Allocator) Int(v int) (r *int) {
 
 func (ac *Allocator) Int32(v int32) (r *int32) {
 	if ac.enabled {
-		r = ac.typedNew(int32Type).(*int32)
+		r = ac.typedNew(int32Type, false).(*int32)
 	} else {
 		r = new(int32)
 	}
@@ -467,7 +469,7 @@ func (ac *Allocator) Int32(v int32) (r *int32) {
 
 func (ac *Allocator) Uint32(v uint32) (r *uint32) {
 	if ac.enabled {
-		r = ac.typedNew(uint32Type).(*uint32)
+		r = ac.typedNew(uint32Type, false).(*uint32)
 	} else {
 		r = new(uint32)
 	}
@@ -477,7 +479,7 @@ func (ac *Allocator) Uint32(v uint32) (r *uint32) {
 
 func (ac *Allocator) Int64(v int64) (r *int64) {
 	if ac.enabled {
-		r = ac.typedNew(int64Type).(*int64)
+		r = ac.typedNew(int64Type, false).(*int64)
 	} else {
 		r = new(int64)
 	}
@@ -487,7 +489,7 @@ func (ac *Allocator) Int64(v int64) (r *int64) {
 
 func (ac *Allocator) Uint64(v uint64) (r *uint64) {
 	if ac.enabled {
-		r = ac.typedNew(uint64Type).(*uint64)
+		r = ac.typedNew(uint64Type, false).(*uint64)
 	} else {
 		r = new(uint64)
 	}
@@ -497,7 +499,7 @@ func (ac *Allocator) Uint64(v uint64) (r *uint64) {
 
 func (ac *Allocator) Float32(v float32) (r *float32) {
 	if ac.enabled {
-		r = ac.typedNew(f32Type).(*float32)
+		r = ac.typedNew(f32Type, false).(*float32)
 	} else {
 		r = new(float32)
 	}
@@ -507,7 +509,7 @@ func (ac *Allocator) Float32(v float32) (r *float32) {
 
 func (ac *Allocator) Float64(v float64) (r *float64) {
 	if ac.enabled {
-		r = ac.typedNew(f64Type).(*float64)
+		r = ac.typedNew(f64Type, false).(*float64)
 	} else {
 		r = new(float64)
 	}
@@ -517,7 +519,7 @@ func (ac *Allocator) Float64(v float64) (r *float64) {
 
 func (ac *Allocator) String(v string) (r *string) {
 	if ac.enabled {
-		r = ac.typedNew(strType).(*string)
+		r = ac.typedNew(strType, false).(*string)
 		*r = ac.NewString(v)
 	} else {
 		r = new(string)
