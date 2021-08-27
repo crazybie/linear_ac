@@ -18,14 +18,14 @@ import (
 )
 
 const (
-	BlockSize = 1024 * 4
+	ChunkSize = 1024 * 2
 )
 
 var (
 	// DbgCheckPointers checks if user allocates from build-in allocator.
 	DbgCheckPointers = true
 
-	DbgEnableLinearAc = true
+	DbgDisableLinearAc = false
 )
 
 type sliceHeader struct {
@@ -44,7 +44,7 @@ type emptyInterface struct {
 	data unsafe.Pointer
 }
 
-var BuildInAc = newLinearAc(false)
+var BuildInAc = &Allocator{disabled: true}
 
 var (
 	uintptrSize = unsafe.Sizeof(uintptr(0))
@@ -60,35 +60,30 @@ var (
 	strType    = reflect.TypeOf("")
 )
 
-type block []byte
+type chunk []byte
 
 type Allocator struct {
-	enabled       bool
-	staticBlock   [1024]byte
-	blocks        []block
-	curBlock      int
+	disabled      bool
+	chunks        []chunk
+	curChunk      int
 	scanObjs      []interface{}
 	knownPointers map[uintptr]struct{}
 	maps          map[unsafe.Pointer]struct{}
 }
 
 func NewLinearAc() *Allocator {
-	return newLinearAc(DbgEnableLinearAc)
-}
-
-func newLinearAc(enable bool) (ret *Allocator) {
-	ret = &Allocator{
-		enabled: enable,
+	ac := &Allocator{
+		disabled: DbgDisableLinearAc,
+		chunks:   []chunk{make(chunk, 0, ChunkSize)},
 	}
-	ret.blocks = append(ret.blocks, ret.staticBlock[:0])
 	if DbgCheckPointers {
-		ret.knownPointers = make(map[uintptr]struct{})
+		ac.knownPointers = make(map[uintptr]struct{})
 	}
-	return
+	return ac
 }
 
 func (ac *Allocator) Reset() {
-	if !ac.enabled {
+	if ac.disabled {
 		return
 	}
 
@@ -97,10 +92,10 @@ func (ac *Allocator) Reset() {
 		ac.scanObjs = ac.scanObjs[:0]
 	}
 
-	for idx, buf := range ac.blocks {
-		ac.blocks[idx] = buf[:0]
+	for idx, buf := range ac.chunks {
+		ac.chunks[idx] = buf[:0]
 	}
-	ac.curBlock = 0
+	ac.curChunk = 0
 	for k := range ac.maps {
 		delete(ac.maps, k)
 	}
@@ -116,7 +111,7 @@ func noescape(p interface{}) interface{} {
 func (ac *Allocator) New(ptrToPtr interface{}) {
 	tmp := noescape(ptrToPtr)
 
-	if !ac.enabled {
+	if ac.disabled {
 		tp := reflect.TypeOf(tmp).Elem().Elem()
 		reflect.ValueOf(tmp).Elem().Set(reflect.New(tp))
 		return
@@ -133,7 +128,7 @@ func (ac *Allocator) New2(ptr interface{}) (ret interface{}) {
 	ptrTemp := noescape(ptr)
 	tp := reflect.TypeOf(ptrTemp).Elem()
 
-	if !ac.enabled {
+	if ac.disabled {
 		ret = reflect.New(tp).Interface()
 	} else {
 		ret = ac.typedNew(tp, false)
@@ -158,19 +153,19 @@ func (ac *Allocator) typedNew(tp reflect.Type, zero bool) (ret interface{}) {
 
 func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 start:
-	buf := &ac.blocks[ac.curBlock]
-	used := len(*buf)
-	if used+need > cap(*buf) {
-		if ac.curBlock == len(ac.blocks)-1 {
-			ac.blocks = append(ac.blocks, make(block, 0, int32(math.Max(float64(BlockSize), float64(need)))))
-		} else if cap(ac.blocks[ac.curBlock+1]) < need {
-			ac.blocks[ac.curBlock+1] = make(block, 0, need)
+	cur := &ac.chunks[ac.curChunk]
+	used := len(*cur)
+	if used+need > cap(*cur) {
+		if ac.curChunk == len(ac.chunks)-1 {
+			ac.chunks = append(ac.chunks, make(chunk, 0, int32(math.Max(float64(ChunkSize), float64(need)))))
+		} else if cap(ac.chunks[ac.curChunk+1]) < need {
+			ac.chunks[ac.curChunk+1] = make(chunk, 0, need)
 		}
-		ac.curBlock++
+		ac.curChunk++
 		goto start
 	}
-	*buf = (*buf)[:used+need]
-	ptr := unsafe.Pointer((uintptr)((*sliceHeader)(unsafe.Pointer(buf)).Data) + uintptr(used))
+	*cur = (*cur)[:used+need]
+	ptr := unsafe.Pointer((uintptr)((*sliceHeader)(unsafe.Pointer(cur)).Data) + uintptr(used))
 	if zero {
 		clearBytes(ptr, need)
 	}
@@ -200,7 +195,7 @@ func clearBytes(dst unsafe.Pointer, len int) {
 }
 
 func (ac *Allocator) NewString(v string) string {
-	if !ac.enabled {
+	if ac.disabled {
 		return v
 	}
 	h := (*stringHeader)(unsafe.Pointer(&v))
@@ -214,7 +209,7 @@ func (ac *Allocator) NewString(v string) string {
 func (ac *Allocator) NewMap(mapPtr interface{}) {
 	var mapPtrTemp = noescape(mapPtr)
 
-	if !ac.enabled {
+	if ac.disabled {
 		tp := reflect.TypeOf(mapPtrTemp).Elem()
 		reflect.ValueOf(mapPtrTemp).Elem().Set(reflect.MakeMap(tp))
 		return
@@ -236,7 +231,7 @@ func (ac *Allocator) NewMap(mapPtr interface{}) {
 func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap_ int) {
 	var slicePtrTmp = noescape(slicePtr)
 
-	if !ac.enabled {
+	if ac.disabled {
 		v := reflect.MakeSlice(reflect.TypeOf(slicePtrTmp).Elem(), len, cap_)
 		reflect.ValueOf(slicePtrTmp).Elem().Set(v)
 		return
@@ -265,7 +260,7 @@ func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap_ int) {
 func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 	var slicePtrTmp = noescape(slicePtr)
 
-	if !ac.enabled {
+	if ac.disabled {
 		s := reflect.ValueOf(slicePtrTmp).Elem()
 		v := reflect.Append(s, reflect.ValueOf(itemPtr))
 		s.Set(v)
@@ -289,7 +284,11 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 	// grow
 	if slice_.Len >= slice_.Cap {
 		pre := *slice_
-		slice_.Cap = slice_.Cap * 2
+		if slice_.Cap >= 16 {
+			slice_.Cap = int(float32(slice_.Cap) * 1.5)
+		} else {
+			slice_.Cap *= 2
+		}
 		if slice_.Cap == 0 {
 			slice_.Cap = 1
 		}
@@ -297,8 +296,8 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 		copyBytes(pre.Data, slice_.Data, pre.Len*elemSz)
 		slice_.Len = pre.Len
 
+		delete(ac.knownPointers, uintptr(pre.Data))
 		if DbgCheckPointers {
-			delete(ac.knownPointers, uintptr(pre.Data))
 			ac.knownPointers[uintptr(slice_.Data)] = struct{}{}
 		}
 	}
@@ -317,7 +316,7 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 
 func (ac *Allocator) Enum(e interface{}) interface{} {
 	var temp = noescape(e)
-	if !ac.enabled {
+	if ac.disabled {
 		r := reflect.New(reflect.TypeOf(temp))
 		r.Elem().Set(reflect.ValueOf(temp))
 		return r.Interface()
@@ -328,7 +327,7 @@ func (ac *Allocator) Enum(e interface{}) interface{} {
 }
 
 func (ac *Allocator) CheckPointers() {
-	if !ac.enabled {
+	if ac.disabled {
 		return
 	}
 	for _, ptr := range ac.scanObjs {
@@ -392,92 +391,92 @@ func (ac *Allocator) checkRecursively(pe reflect.Value) error {
 }
 
 func (ac *Allocator) Bool(v bool) (r *bool) {
-	if ac.enabled {
-		r = ac.typedNew(boolType, false).(*bool)
-	} else {
+	if ac.disabled {
 		r = new(bool)
+	} else {
+		r = ac.typedNew(boolType, false).(*bool)
 	}
 	*r = v
 	return
 }
 
 func (ac *Allocator) Int(v int) (r *int) {
-	if ac.enabled {
-		r = ac.typedNew(intType, false).(*int)
-	} else {
+	if ac.disabled {
 		r = new(int)
+	} else {
+		r = ac.typedNew(intType, false).(*int)
 	}
 	*r = v
 	return
 }
 
 func (ac *Allocator) Int32(v int32) (r *int32) {
-	if ac.enabled {
-		r = ac.typedNew(int32Type, false).(*int32)
-	} else {
+	if ac.disabled {
 		r = new(int32)
+	} else {
+		r = ac.typedNew(int32Type, false).(*int32)
 	}
 	*r = v
 	return
 }
 
 func (ac *Allocator) Uint32(v uint32) (r *uint32) {
-	if ac.enabled {
-		r = ac.typedNew(uint32Type, false).(*uint32)
-	} else {
+	if ac.disabled {
 		r = new(uint32)
+	} else {
+		r = ac.typedNew(uint32Type, false).(*uint32)
 	}
 	*r = v
 	return
 }
 
 func (ac *Allocator) Int64(v int64) (r *int64) {
-	if ac.enabled {
-		r = ac.typedNew(int64Type, false).(*int64)
-	} else {
+	if ac.disabled {
 		r = new(int64)
+	} else {
+		r = ac.typedNew(int64Type, false).(*int64)
 	}
 	*r = v
 	return
 }
 
 func (ac *Allocator) Uint64(v uint64) (r *uint64) {
-	if ac.enabled {
-		r = ac.typedNew(uint64Type, false).(*uint64)
-	} else {
+	if ac.disabled {
 		r = new(uint64)
+	} else {
+		r = ac.typedNew(uint64Type, false).(*uint64)
 	}
 	*r = v
 	return
 }
 
 func (ac *Allocator) Float32(v float32) (r *float32) {
-	if ac.enabled {
-		r = ac.typedNew(f32Type, false).(*float32)
-	} else {
+	if ac.disabled {
 		r = new(float32)
+	} else {
+		r = ac.typedNew(f32Type, false).(*float32)
 	}
 	*r = v
 	return
 }
 
 func (ac *Allocator) Float64(v float64) (r *float64) {
-	if ac.enabled {
-		r = ac.typedNew(f64Type, false).(*float64)
-	} else {
+	if ac.disabled {
 		r = new(float64)
+	} else {
+		r = ac.typedNew(f64Type, false).(*float64)
 	}
 	*r = v
 	return
 }
 
 func (ac *Allocator) String(v string) (r *string) {
-	if ac.enabled {
-		r = ac.typedNew(strType, false).(*string)
-		*r = ac.NewString(v)
-	} else {
+	if ac.disabled {
 		r = new(string)
 		*r = v
+	} else {
+		r = ac.typedNew(strType, false).(*string)
+		*r = ac.NewString(v)
 	}
 	return
 }
