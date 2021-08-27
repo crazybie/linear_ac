@@ -103,7 +103,7 @@ type Allocator struct {
 	staticBlock   [1024]byte
 	blocks        []block
 	curBlock      int
-	scanObjs      []reflect.Value
+	scanObjs      []interface{}
 	knownPointers map[uintptr]struct{}
 	maps          map[unsafe.Pointer]struct{}
 }
@@ -190,7 +190,7 @@ func (ac *Allocator) typedNew(tp reflect.Type, zero bool) (ret interface{}) {
 	ret = r.Interface()
 	if atomic.LoadInt32(&DbgCheckPointers) == 1 {
 		if tp.Kind() == reflect.Struct {
-			ac.scanObjs = append(ac.scanObjs, r)
+			ac.scanObjs = append(ac.scanObjs, ret)
 		}
 		ac.knownPointers[uintptr(ptr)] = struct{}{}
 	}
@@ -378,7 +378,7 @@ func (ac *Allocator) CheckPointers() {
 		return
 	}
 	for _, ptr := range ac.scanObjs {
-		if err := ac.checkRecursively(ptr); err != nil {
+		if err := ac.checkRecursively(reflect.ValueOf(ptr)); err != nil {
 			panic(err)
 		}
 	}
