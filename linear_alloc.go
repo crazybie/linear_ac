@@ -11,7 +11,6 @@ package linear_ac
 
 import (
 	"fmt"
-	"math"
 	"reflect"
 	"runtime"
 	"sync"
@@ -19,7 +18,8 @@ import (
 )
 
 const (
-	ChunkSize = 1024 * 2
+	ChunkSize    = 1024 * 4
+	InitChunkCnt = 8
 )
 
 var (
@@ -45,8 +45,6 @@ type emptyInterface struct {
 	data unsafe.Pointer
 }
 
-var BuildInAc = &Allocator{disabled: true}
-
 var (
 	uintptrSize = unsafe.Sizeof(uintptr(0))
 
@@ -61,7 +59,23 @@ var (
 	strType    = reflect.TypeOf("")
 )
 
+/// Chunk
+
 type chunk []byte
+
+var chunkPool = sync.Pool{
+	New: func() interface{} {
+		return make(chunk, 0, ChunkSize)
+	},
+}
+
+func initChunkPool(chunkCnt int) {
+	for i := 0; i < chunkCnt; i++ {
+		chunkPool.Put(make(chunk, 0, ChunkSize))
+	}
+}
+
+/// Allocator
 
 type Allocator struct {
 	disabled      bool
@@ -72,14 +86,26 @@ type Allocator struct {
 	maps          map[unsafe.Pointer]struct{}
 }
 
-var pool = sync.Pool{
+var BuildInAc = &Allocator{disabled: true}
+
+var acPool = sync.Pool{
 	New: func() interface{} {
 		return newLinearAc()
 	},
 }
 
+func newLinearAc() *Allocator {
+	ac := &Allocator{
+		disabled: DbgDisableLinearAc,
+	}
+	if DbgCheckPointers {
+		ac.knownPointers = make(map[uintptr]struct{})
+	}
+	return ac
+}
+
 func Get() *Allocator {
-	return pool.Get().(*Allocator)
+	return acPool.Get().(*Allocator)
 }
 
 func (ac *Allocator) Release() {
@@ -87,18 +113,7 @@ func (ac *Allocator) Release() {
 		return
 	}
 	ac.Reset()
-	pool.Put(ac)
-}
-
-func newLinearAc() *Allocator {
-	ac := &Allocator{
-		disabled: DbgDisableLinearAc,
-		chunks:   []chunk{make(chunk, 0, ChunkSize)},
-	}
-	if DbgCheckPointers {
-		ac.knownPointers = make(map[uintptr]struct{})
-	}
-	return ac
+	acPool.Put(ac)
 }
 
 func (ac *Allocator) Reset() {
@@ -111,9 +126,11 @@ func (ac *Allocator) Reset() {
 		ac.scanObjs = ac.scanObjs[:0]
 	}
 
-	for idx, buf := range ac.chunks {
-		ac.chunks[idx] = buf[:0]
+	for _, ck := range ac.chunks {
+		chunkPool.Put(ck[:0])
 	}
+	ac.chunks = ac.chunks[:0]
+
 	ac.curChunk = 0
 	for k := range ac.maps {
 		delete(ac.maps, k)
@@ -171,12 +188,19 @@ func (ac *Allocator) typedNew(tp reflect.Type, zero bool) (ret interface{}) {
 }
 
 func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
+	if len(ac.chunks) == 0 {
+		ac.chunks = append(ac.chunks, chunkPool.Get().(chunk))
+	}
 start:
 	cur := &ac.chunks[ac.curChunk]
 	used := len(*cur)
 	if used+need > cap(*cur) {
 		if ac.curChunk == len(ac.chunks)-1 {
-			ac.chunks = append(ac.chunks, make(chunk, 0, int32(math.Max(float64(ChunkSize), float64(need)))))
+			if need > ChunkSize {
+				ac.chunks = append(ac.chunks, make(chunk, 0, need))
+			} else {
+				ac.chunks = append(ac.chunks, chunkPool.Get().(chunk))
+			}
 		} else if cap(ac.chunks[ac.curChunk+1]) < need {
 			ac.chunks[ac.curChunk+1] = make(chunk, 0, need)
 		}
@@ -226,7 +250,7 @@ func (ac *Allocator) NewString(v string) string {
 
 // NewMap use build-in allocator
 func (ac *Allocator) NewMap(mapPtr interface{}) {
-	var mapPtrTemp = noescape(mapPtr)
+	mapPtrTemp := noescape(mapPtr)
 
 	if ac.disabled {
 		tp := reflect.TypeOf(mapPtrTemp).Elem()
@@ -248,7 +272,7 @@ func (ac *Allocator) NewMap(mapPtr interface{}) {
 }
 
 func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap_ int) {
-	var slicePtrTmp = noescape(slicePtr)
+	slicePtrTmp := noescape(slicePtr)
 
 	if ac.disabled {
 		v := reflect.MakeSlice(reflect.TypeOf(slicePtrTmp).Elem(), len, cap_)
@@ -277,7 +301,7 @@ func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap_ int) {
 
 // SliceAppend append pointers to slice
 func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
-	var slicePtrTmp = noescape(slicePtr)
+	slicePtrTmp := noescape(slicePtr)
 
 	if ac.disabled {
 		s := reflect.ValueOf(slicePtrTmp).Elem()
@@ -315,8 +339,8 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 		copyBytes(pre.Data, slice_.Data, pre.Len*elemSz)
 		slice_.Len = pre.Len
 
-		delete(ac.knownPointers, uintptr(pre.Data))
 		if DbgCheckPointers {
+			delete(ac.knownPointers, uintptr(pre.Data))
 			ac.knownPointers[uintptr(slice_.Data)] = struct{}{}
 		}
 	}
@@ -334,7 +358,7 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 }
 
 func (ac *Allocator) Enum(e interface{}) interface{} {
-	var temp = noescape(e)
+	temp := noescape(e)
 	if ac.disabled {
 		r := reflect.New(reflect.TypeOf(temp))
 		r.Elem().Set(reflect.ValueOf(temp))
@@ -498,4 +522,8 @@ func (ac *Allocator) String(v string) (r *string) {
 		*r = ac.NewString(v)
 	}
 	return
+}
+
+func init() {
+	initChunkPool(InitChunkCnt)
 }

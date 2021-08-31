@@ -346,6 +346,7 @@ func Benchmark_linearAlloc(t *testing.B) {
 	DbgCheckPointers = false
 	var ac = Get()
 	defer func() {
+		ac.Release()
 		DbgCheckPointers = true
 	}()
 	t.StartTimer()
@@ -355,7 +356,7 @@ func Benchmark_linearAlloc(t *testing.B) {
 		ac.New(&d)
 		d.Age = ac.Int(11)
 
-		n := 1000
+		n := 200
 		for j := 0; j < n; j++ {
 			var item *PbItem
 			if j%2 == 0 {
@@ -395,7 +396,6 @@ func Benchmark_linearAlloc(t *testing.B) {
 		}
 		ac.Reset()
 	}
-	ac.Release()
 }
 
 func Benchmark_buildInAlloc(t *testing.B) {
@@ -409,13 +409,13 @@ func Benchmark_buildInAlloc(t *testing.B) {
 
 	t.StartTimer()
 	for i := 0; i < t.N; i++ {
-		var d *PbData = new(PbData)
+		d := new(PbData)
 		d.Age = newInt(11)
 
-		n := 1000
+		n := 200
 		for j := 0; j < n; j++ {
 
-			var item *PbItem = new(PbItem)
+			item := new(PbItem)
 			item.Id = newInt(2 + j)
 			item.Price = newInt(100 + j)
 			item.Class = newInt(3 + j)
