@@ -65,21 +65,16 @@ type chunk []byte
 
 var chunkPool = sync.Pool{
 	New: func() interface{} {
-		return make(chunk, 0, ChunkSize)
+		ck := make(chunk, 0, ChunkSize)
+		return &ck
 	},
-}
-
-func initChunkPool(chunkCnt int) {
-	for i := 0; i < chunkCnt; i++ {
-		chunkPool.Put(make(chunk, 0, ChunkSize))
-	}
 }
 
 /// Allocator
 
 type Allocator struct {
 	disabled      bool
-	chunks        []chunk
+	chunks        []*chunk
 	curChunk      int
 	scanObjs      []interface{}
 	knownPointers map[uintptr]struct{}
@@ -127,7 +122,8 @@ func (ac *Allocator) Reset() {
 	}
 
 	for _, ck := range ac.chunks {
-		chunkPool.Put(ck[:0])
+		*ck = (*ck)[:0]
+		chunkPool.Put(ck)
 	}
 	ac.chunks = ac.chunks[:0]
 
@@ -189,20 +185,24 @@ func (ac *Allocator) typedNew(tp reflect.Type, zero bool) (ret interface{}) {
 
 func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 	if len(ac.chunks) == 0 {
-		ac.chunks = append(ac.chunks, chunkPool.Get().(chunk))
+		ac.chunks = append(ac.chunks, chunkPool.Get().(*chunk))
 	}
 start:
-	cur := &ac.chunks[ac.curChunk]
+	cur := ac.chunks[ac.curChunk]
 	used := len(*cur)
 	if used+need > cap(*cur) {
 		if ac.curChunk == len(ac.chunks)-1 {
+			var ck *chunk
 			if need > ChunkSize {
-				ac.chunks = append(ac.chunks, make(chunk, 0, need))
+				c := make(chunk, 0, need)
+				ck = &c
 			} else {
-				ac.chunks = append(ac.chunks, chunkPool.Get().(chunk))
+				ck = chunkPool.Get().(*chunk)
 			}
-		} else if cap(ac.chunks[ac.curChunk+1]) < need {
-			ac.chunks[ac.curChunk+1] = make(chunk, 0, need)
+			ac.chunks = append(ac.chunks, ck)
+		} else if cap(*ac.chunks[ac.curChunk+1]) < need {
+			ck := make(chunk, 0, need)
+			ac.chunks[ac.curChunk+1] = &ck
 		}
 		ac.curChunk++
 		goto start
@@ -522,8 +522,4 @@ func (ac *Allocator) String(v string) (r *string) {
 		*r = ac.NewString(v)
 	}
 	return
-}
-
-func init() {
-	initChunkPool(InitChunkCnt)
 }
