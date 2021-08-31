@@ -43,7 +43,11 @@ type PbData struct {
 
 func main() {
 	
-	ac := NewLinearAllocator()
+	ac := Get()
+	defer func(){
+		ac.Release()
+    }()
+	
 	var d *PbData
 	ac.New(&d)
 	d.Age = ac.Int(11)
@@ -68,9 +72,11 @@ func main() {
 ## Benchmark
 Results from benchmark tests:
 ``` 
-cpu: Intel(R) Core(TM) i7-10510U CPU @ 1.80GHz
+goos: linux
+goarch: amd64
+pkg: oops/common/linear_alloc
 Benchmark_linearAlloc
-Benchmark_linearAlloc-8             2751            377632 ns/op              44 B/op          0 allocs/op
+Benchmark_linearAlloc-6    	   27282	     45661 ns/op	     229 B/op	       7 allocs/op
 Benchmark_buildInAlloc
-Benchmark_buildInAlloc-8            3436           1523688 ns/op          112440 B/op       7013 allocs/op
+Benchmark_buildInAlloc-6   	   10000	    302245 ns/op	   23352 B/op	    1411 allocs/op
 ```
