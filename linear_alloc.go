@@ -12,14 +12,12 @@ package linear_ac
 import (
 	"fmt"
 	"reflect"
-	"runtime"
 	"sync"
 	"unsafe"
 )
 
 const (
-	ChunkSize    = 1024 * 4
-	InitChunkCnt = 8
+	ChunkSize = 1024 * 4
 )
 
 var (
@@ -49,7 +47,6 @@ var (
 	uintptrSize = unsafe.Sizeof(uintptr(0))
 
 	boolType   = reflect.TypeOf(true)
-	intType    = reflect.TypeOf(0)
 	int32Type  = reflect.TypeOf(int32(0))
 	uint32Type = reflect.TypeOf(uint32(0))
 	int64Type  = reflect.TypeOf(int64(0))
@@ -154,8 +151,7 @@ func (ac *Allocator) New(ptrToPtr interface{}) {
 	*(*uintptr)((*emptyInterface)(unsafe.Pointer(&tmp)).data) = (uintptr)((*emptyInterface)(unsafe.Pointer(&v)).data)
 }
 
-// New2 is slower than New due to the data copying.
-// useful for migration.
+// New2 is useful for code migration.
 func (ac *Allocator) New2(ptr interface{}) (ret interface{}) {
 	ptrTemp := noescape(ptr)
 	tp := reflect.TypeOf(ptrTemp).Elem()
@@ -267,8 +263,6 @@ func (ac *Allocator) NewMap(mapPtr interface{}) {
 		ac.maps = make(map[unsafe.Pointer]struct{})
 	}
 	ac.maps[v.data] = struct{}{}
-
-	runtime.KeepAlive(mapPtrTemp)
 }
 
 func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap_ int) {
@@ -299,13 +293,12 @@ func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap_ int) {
 	}
 }
 
-// SliceAppend append pointers to slice
-func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
+func (ac *Allocator) SliceAppend(slicePtr interface{}, elem interface{}) {
 	slicePtrTmp := noescape(slicePtr)
 
 	if ac.disabled {
 		s := reflect.ValueOf(slicePtrTmp).Elem()
-		v := reflect.Append(s, reflect.ValueOf(itemPtr))
+		v := reflect.Append(s, reflect.ValueOf(elem))
 		s.Set(v)
 		return
 	}
@@ -314,15 +307,15 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 	if refSlicePtrTp.Kind() != reflect.Ptr || refSlicePtrTp.Elem().Kind() != reflect.Slice {
 		panic(fmt.Errorf("expect pointer to slice"))
 	}
-	refItemPtrTp := reflect.TypeOf(itemPtr)
-	if refSlicePtrTp.Elem().Elem() != refItemPtrTp {
+	refElemPtrTp := reflect.TypeOf(elem)
+	if refSlicePtrTp.Elem().Elem() != refElemPtrTp {
 		panic(fmt.Errorf("elem type not match with slice"))
 	}
 
 	sliceEface := (*emptyInterface)(unsafe.Pointer(&slicePtrTmp))
 	slice_ := (*sliceHeader)(sliceEface.data)
-	itemEface := (*emptyInterface)(unsafe.Pointer(&itemPtr))
-	elemSz := int(refItemPtrTp.Size())
+	elemEface := (*emptyInterface)(unsafe.Pointer(&elem))
+	elemSz := int(refElemPtrTp.Size())
 
 	// grow
 	if slice_.Len >= slice_.Cap {
@@ -348,10 +341,10 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, itemPtr interface{}) {
 	// append
 	if slice_.Len < slice_.Cap {
 		d := unsafe.Pointer(uintptr(slice_.Data) + uintptr(elemSz)*uintptr(slice_.Len))
-		if refItemPtrTp.Kind() == reflect.Ptr {
-			*(*uintptr)(d) = (uintptr)(itemEface.data)
+		if refElemPtrTp.Kind() == reflect.Ptr {
+			*(*uintptr)(d) = (uintptr)(elemEface.data)
 		} else {
-			copyBytes(itemEface.data, d, elemSz)
+			copyBytes(elemEface.data, d, elemSz)
 		}
 		slice_.Len++
 	}
@@ -443,13 +436,13 @@ func (ac *Allocator) Bool(v bool) (r *bool) {
 	return
 }
 
-func (ac *Allocator) Int(v int) (r *int) {
+func (ac *Allocator) Int(v int) (r *int32) {
 	if ac.disabled {
-		r = new(int)
+		r = new(int32)
 	} else {
-		r = ac.typedNew(intType, false).(*int)
+		r = ac.typedNew(int32Type, false).(*int32)
 	}
-	*r = v
+	*r = int32(v)
 	return
 }
 
