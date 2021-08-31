@@ -220,7 +220,7 @@ func TestLinearAllocator_ExternalMap(t *testing.T) {
 func TestLinearAllocator_NewSlice(t *testing.T) {
 	DbgCheckPointers = true
 	ac := Get()
-	s := make([]*int, 0)
+	s := make([]*int32, 0)
 	ac.SliceAppend(&s, ac.Int(2))
 	if len(s) != 1 && *s[0] != 2 {
 		t.Fail()
