@@ -305,6 +305,21 @@ func TestAllocator_EnumInt32(t *testing.T) {
 	ac.Release()
 }
 
+func TestAllocator_CheckExternalEnum(t *testing.T) {
+	ac := Get()
+	defer ac.Release()
+	defer func() {
+		if err := recover(); err == nil {
+			t.Errorf("failed to check")
+		}
+	}()
+
+	var item *PbItem
+	ac.New(&item)
+	item.EnumVal = new(EnumA)
+	ac.CheckPointers()
+}
+
 func TestBuildInAllocator_All(t *testing.T) {
 	ac := BuildInAc
 	var item *PbItem
