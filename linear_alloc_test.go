@@ -2,6 +2,7 @@ package linear_ac
 
 import (
 	"fmt"
+	"math"
 	"runtime"
 	"testing"
 )
@@ -350,16 +351,16 @@ func TestBuildInAllocator_All(t *testing.T) {
 	ac.Release()
 }
 
-func Benchmark_linearAlloc(t *testing.B) {
+func CallLinearAllocBench(gcRate int, t *testing.B) {
 	t.ReportAllocs()
 	DbgCheckPointers = false
-	var ac = Get()
+	ac := Get()
 	defer func() {
 		ac.Release()
 		DbgCheckPointers = true
 	}()
 
-	keepSameWithNativeBench := make([]*PbData, 0, t.N)
+	keepSameWithBuildInBench := make([]*PbData, 0, t.N)
 	runtime.GC()
 	t.StartTimer()
 
@@ -403,25 +404,25 @@ func Benchmark_linearAlloc(t *testing.B) {
 			}
 		}
 
-		if i%10000 == 0 {
+		if i%gcRate == 0 {
 			runtime.GC()
 		}
 
-		keepSameWithNativeBench = append(keepSameWithNativeBench, d)
+		keepSameWithBuildInBench = append(keepSameWithBuildInBench, d)
 
 		ac.Reset()
 	}
 }
 
-func Benchmark_buildInAlloc(t *testing.B) {
+func CallBuildInAcBench(gcRate int, t *testing.B) {
 	t.ReportAllocs()
 
 	newInt := func(v int32) *int32 { return &v }
 	newStr := func(v string) *string { return &v }
 	newBool := func(v bool) *bool { return &v }
-	preventFromGc := make([]*PbData, 0, t.N)
 	enum := func(v EnumA) *EnumA { return &v }
 
+	preventFromGc := make([]*PbData, 0, t.N)
 	runtime.GC()
 	t.StartTimer()
 	for i := 0; i < t.N; i++ {
@@ -453,9 +454,33 @@ func Benchmark_buildInAlloc(t *testing.B) {
 				t.Errorf("item.id")
 			}
 		}
-		if i%10000 == 0 {
+		if i%gcRate == 0 {
 			runtime.GC()
 		}
 		preventFromGc = append(preventFromGc, d)
 	}
+}
+
+func Benchmark_linearAllocNoGC(t *testing.B) {
+	CallLinearAllocBench(math.MaxInt32, t)
+}
+
+func Benchmark_buildInAllocNoGc(t *testing.B) {
+	CallBuildInAcBench(math.MaxInt32, t)
+}
+
+func Benchmark_linearAllocGc(t *testing.B) {
+	CallLinearAllocBench(100000, t)
+}
+
+func Benchmark_buildInAllocGc(t *testing.B) {
+	CallBuildInAcBench(100000, t)
+}
+
+func Benchmark_linearAllocGc2(t *testing.B) {
+	CallLinearAllocBench(10000, t)
+}
+
+func Benchmark_buildInAllocGc2(t *testing.B) {
+	CallBuildInAcBench(10000, t)
 }

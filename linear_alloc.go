@@ -46,14 +46,14 @@ type emptyInterface struct {
 var (
 	uintptrSize = unsafe.Sizeof(uintptr(0))
 
-	boolType   = reflect.TypeOf(true)
-	int32Type  = reflect.TypeOf(int32(0))
-	uint32Type = reflect.TypeOf(uint32(0))
-	int64Type  = reflect.TypeOf(int64(0))
-	uint64Type = reflect.TypeOf(uint64(0))
-	f32Type    = reflect.TypeOf(float32(0))
-	f64Type    = reflect.TypeOf(float64(0))
-	strType    = reflect.TypeOf("")
+	boolPtrType = reflect.TypeOf((*bool)(nil))
+	i32PtrType  = reflect.TypeOf((*int32)(nil))
+	u32PtrType  = reflect.TypeOf((*uint32)(nil))
+	i64PtrType  = reflect.TypeOf((*int64)(nil))
+	u64PtrType  = reflect.TypeOf((*uint64)(nil))
+	f32PtrType  = reflect.TypeOf((*float32)(nil))
+	f64PtrType  = reflect.TypeOf((*float64)(nil))
+	strPtrType  = reflect.TypeOf((*string)(nil))
 )
 
 /// Chunk
@@ -147,7 +147,7 @@ func (ac *Allocator) New(ptrToPtr interface{}) {
 		return
 	}
 
-	tp := reflect.TypeOf(tmp).Elem().Elem()
+	tp := reflect.TypeOf(tmp).Elem()
 	v := ac.typedNew(tp, true)
 	*(*uintptr)((*emptyInterface)(unsafe.Pointer(&tmp)).data) = (uintptr)((*emptyInterface)(unsafe.Pointer(&v)).data)
 }
@@ -155,24 +155,28 @@ func (ac *Allocator) New(ptrToPtr interface{}) {
 // New2 is useful for code migration.
 func (ac *Allocator) New2(ptr interface{}) (ret interface{}) {
 	ptrTemp := noescape(ptr)
-	tp := reflect.TypeOf(ptrTemp).Elem()
+	ptrType := reflect.TypeOf(ptrTemp)
+	tp := ptrType.Elem()
 
 	if ac.disabled {
 		ret = reflect.New(tp).Interface()
 	} else {
-		ret = ac.typedNew(tp, false)
+		ret = ac.typedNew(ptrType, false)
 	}
 
 	copyBytes((*emptyInterface)(unsafe.Pointer(&ptrTemp)).data, (*emptyInterface)(unsafe.Pointer(&ret)).data, int(tp.Size()))
 	return
 }
 
-func (ac *Allocator) typedNew(tp reflect.Type, zero bool) (ret interface{}) {
-	ptr := ac.alloc(int(tp.Size()), zero)
-	r := reflect.NewAt(tp, ptr)
-	ret = r.Interface()
+func (ac *Allocator) typedNew(ptrTp reflect.Type, zero bool) (ret interface{}) {
+	objType := ptrTp.Elem()
+	ptr := ac.alloc(int(objType.Size()), zero)
+	retEface := (*emptyInterface)(unsafe.Pointer(&ret))
+	retEface.typ = (*emptyInterface)(unsafe.Pointer(&ptrTp)).data
+	retEface.data = ptr
+
 	if DbgCheckPointers {
-		if tp.Kind() == reflect.Struct {
+		if objType.Kind() == reflect.Struct {
 			ac.scanObjs = append(ac.scanObjs, ret)
 		}
 		ac.knownPointers[uintptr(ptr)] = struct{}{}
@@ -358,7 +362,7 @@ func (ac *Allocator) Enum(e interface{}) interface{} {
 		r.Elem().Set(reflect.ValueOf(temp))
 		return r.Interface()
 	}
-	r := ac.typedNew(reflect.TypeOf(temp), false)
+	r := ac.typedNew(reflect.PtrTo(reflect.TypeOf(temp)), false)
 	*((*[2]*uintptr)(unsafe.Pointer(&r)))[1] = *(*uintptr)((*emptyInterface)(unsafe.Pointer(&temp)).data)
 	return r
 }
@@ -431,7 +435,7 @@ func (ac *Allocator) Bool(v bool) (r *bool) {
 	if ac.disabled {
 		r = new(bool)
 	} else {
-		r = ac.typedNew(boolType, false).(*bool)
+		r = ac.typedNew(boolPtrType, false).(*bool)
 	}
 	*r = v
 	return
@@ -441,7 +445,7 @@ func (ac *Allocator) Int(v int) (r *int32) {
 	if ac.disabled {
 		r = new(int32)
 	} else {
-		r = ac.typedNew(int32Type, false).(*int32)
+		r = ac.typedNew(i32PtrType, false).(*int32)
 	}
 	*r = int32(v)
 	return
@@ -451,7 +455,7 @@ func (ac *Allocator) Int32(v int32) (r *int32) {
 	if ac.disabled {
 		r = new(int32)
 	} else {
-		r = ac.typedNew(int32Type, false).(*int32)
+		r = ac.typedNew(i32PtrType, false).(*int32)
 	}
 	*r = v
 	return
@@ -461,7 +465,7 @@ func (ac *Allocator) Uint32(v uint32) (r *uint32) {
 	if ac.disabled {
 		r = new(uint32)
 	} else {
-		r = ac.typedNew(uint32Type, false).(*uint32)
+		r = ac.typedNew(u32PtrType, false).(*uint32)
 	}
 	*r = v
 	return
@@ -471,7 +475,7 @@ func (ac *Allocator) Int64(v int64) (r *int64) {
 	if ac.disabled {
 		r = new(int64)
 	} else {
-		r = ac.typedNew(int64Type, false).(*int64)
+		r = ac.typedNew(i64PtrType, false).(*int64)
 	}
 	*r = v
 	return
@@ -481,7 +485,7 @@ func (ac *Allocator) Uint64(v uint64) (r *uint64) {
 	if ac.disabled {
 		r = new(uint64)
 	} else {
-		r = ac.typedNew(uint64Type, false).(*uint64)
+		r = ac.typedNew(u64PtrType, false).(*uint64)
 	}
 	*r = v
 	return
@@ -491,7 +495,7 @@ func (ac *Allocator) Float32(v float32) (r *float32) {
 	if ac.disabled {
 		r = new(float32)
 	} else {
-		r = ac.typedNew(f32Type, false).(*float32)
+		r = ac.typedNew(f32PtrType, false).(*float32)
 	}
 	*r = v
 	return
@@ -501,7 +505,7 @@ func (ac *Allocator) Float64(v float64) (r *float64) {
 	if ac.disabled {
 		r = new(float64)
 	} else {
-		r = ac.typedNew(f64Type, false).(*float64)
+		r = ac.typedNew(f64PtrType, false).(*float64)
 	}
 	*r = v
 	return
@@ -512,7 +516,7 @@ func (ac *Allocator) String(v string) (r *string) {
 		r = new(string)
 		*r = v
 	} else {
-		r = ac.typedNew(strType, false).(*string)
+		r = ac.typedNew(strPtrType, false).(*string)
 		*r = ac.NewString(v)
 	}
 	return
