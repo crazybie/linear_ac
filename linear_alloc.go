@@ -123,8 +123,8 @@ func (ac *Allocator) Reset() {
 		chunkPool.Put(ck)
 	}
 	ac.chunks = ac.chunks[:0]
-
 	ac.curChunk = 0
+
 	for k := range ac.maps {
 		delete(ac.maps, k)
 	}

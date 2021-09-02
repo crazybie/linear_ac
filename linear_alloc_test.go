@@ -364,6 +364,9 @@ func Benchmark_linearAlloc(t *testing.B) {
 		ac.Release()
 		DbgCheckPointers = true
 	}()
+
+	keepSameWithNativeBench := make([]*PbData, 0, t.N)
+	runtime.GC()
 	t.StartTimer()
 
 	for i := 0; i < t.N; i++ {
@@ -371,7 +374,7 @@ func Benchmark_linearAlloc(t *testing.B) {
 		ac.New(&d)
 		d.Age = ac.Int(11)
 
-		n := int32(200)
+		n := int32(20)
 		for j := int32(0); j < n; j++ {
 			var item *PbItem
 			if j%2 == 0 {
@@ -406,9 +409,12 @@ func Benchmark_linearAlloc(t *testing.B) {
 			}
 		}
 
-		if i%200 == 0 {
+		if i%10000 == 0 {
 			runtime.GC()
 		}
+
+		keepSameWithNativeBench = append(keepSameWithNativeBench, d)
+
 		ac.Reset()
 	}
 }
@@ -422,12 +428,13 @@ func Benchmark_buildInAlloc(t *testing.B) {
 	preventFromGc := make([]*PbData, 0, t.N)
 	enum := func(v EnumA) *EnumA { return &v }
 
+	runtime.GC()
 	t.StartTimer()
 	for i := 0; i < t.N; i++ {
 		d := new(PbData)
 		d.Age = newInt(11)
 
-		n := int32(200)
+		n := int32(20)
 		for j := int32(0); j < n; j++ {
 
 			item := new(PbItem)
@@ -452,12 +459,9 @@ func Benchmark_buildInAlloc(t *testing.B) {
 				t.Errorf("item.id")
 			}
 		}
-		if i%200 == 0 {
+		if i%10000 == 0 {
 			runtime.GC()
 		}
 		preventFromGc = append(preventFromGc, d)
-	}
-	if len(preventFromGc) != t.N {
-		t.Fail()
 	}
 }
