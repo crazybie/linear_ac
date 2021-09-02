@@ -484,3 +484,11 @@ func Benchmark_linearAllocGc2(t *testing.B) {
 func Benchmark_buildInAllocGc2(t *testing.B) {
 	CallBuildInAcBench(10000, t)
 }
+
+func Benchmark_linearAllocGc3(t *testing.B) {
+	CallLinearAllocBench(1000, t)
+}
+
+func Benchmark_buildInAllocGc3(t *testing.B) {
+	CallBuildInAcBench(1000, t)
+}

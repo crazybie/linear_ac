@@ -75,8 +75,21 @@ Results from benchmark tests:
 goos: linux
 goarch: amd64
 pkg: oops/common/linear_alloc
-Benchmark_linearAlloc
-Benchmark_linearAlloc-6    	   28059	     43386 ns/op	       4 B/op	       0 allocs/op
-Benchmark_buildInAlloc
-Benchmark_buildInAlloc-6   	   10000	    286849 ns/op	   23352 B/op	    1411 allocs/op
+Benchmark_linearAllocNoGC
+Benchmark_linearAllocNoGC-6    	  366729	      3117 ns/op	       8 B/op	       0 allocs/op
+Benchmark_buildInAllocNoGc
+Benchmark_buildInAllocNoGc-6   	  306507	      4176 ns/op	    2244 B/op	     148 allocs/op
+Benchmark_linearAllocGc
+Benchmark_linearAllocGc-6      	  379468	      3138 ns/op	       8 B/op	       0 allocs/op
+Benchmark_buildInAllocGc
+Benchmark_buildInAllocGc-6     	  305342	      4861 ns/op	    2244 B/op	     148 allocs/op
+Benchmark_linearAllocGc2
+Benchmark_linearAllocGc2-6     	  381771	      3346 ns/op	       8 B/op	       0 allocs/op
+Benchmark_buildInAllocGc2
+Benchmark_buildInAllocGc2-6    	  329953	     15584 ns/op	    2244 B/op	     148 allocs/op
+Benchmark_linearAllocGc3
+Benchmark_linearAllocGc3-6     	  358688	      7520 ns/op	       8 B/op	       0 allocs/op
+Benchmark_buildInAllocGc3
+Benchmark_buildInAllocGc3-6    	  157050	     55906 ns/op	    2244 B/op	     148 allocs/op
+
 ```
