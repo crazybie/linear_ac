@@ -43,10 +43,14 @@ type emptyInterface struct {
 	data unsafe.Pointer
 }
 
+//go:linkname reflect_typedmemmove reflect.typedmemmove
+func reflect_typedmemmove(typ, dst, src unsafe.Pointer)
+
 var (
 	uintptrSize = unsafe.Sizeof(uintptr(0))
 
 	boolPtrType = reflect.TypeOf((*bool)(nil))
+	intPtrType  = reflect.TypeOf((*int)(nil))
 	i32PtrType  = reflect.TypeOf((*int32)(nil))
 	u32PtrType  = reflect.TypeOf((*uint32)(nil))
 	i64PtrType  = reflect.TypeOf((*int64)(nil))
@@ -132,15 +136,14 @@ func (ac *Allocator) Reset() {
 	}
 }
 
-func noescape(p interface{}) interface{} {
-	var temp interface{}
+func noEscape(p interface{}) (ret interface{}) {
 	r := *(*[2]uintptr)(unsafe.Pointer(&p))
-	*(*[2]uintptr)(unsafe.Pointer(&temp)) = r
-	return temp
+	*(*[2]uintptr)(unsafe.Pointer(&ret)) = r
+	return
 }
 
 func (ac *Allocator) New(ptrToPtr interface{}) {
-	tmp := noescape(ptrToPtr)
+	tmp := noEscape(ptrToPtr)
 
 	if ac.disabled {
 		tp := reflect.TypeOf(tmp).Elem().Elem()
@@ -153,14 +156,11 @@ func (ac *Allocator) New(ptrToPtr interface{}) {
 	*(*uintptr)((*emptyInterface)(unsafe.Pointer(&tmp)).data) = (uintptr)((*emptyInterface)(unsafe.Pointer(&v)).data)
 }
 
-//go:linkname reflect_typedmemmove reflect.typedmemmove
-func reflect_typedmemmove(typ, dst, src unsafe.Pointer)
-
 // New2 is useful for code migration.
 // native mode is slower than new() due to the additional memory move from stack to heap,
 // this is on purpose to avoid heap alloc in linear mode.
 func (ac *Allocator) New2(ptr interface{}) (ret interface{}) {
-	ptrTemp := noescape(ptr)
+	ptrTemp := noEscape(ptr)
 	ptrType := reflect.TypeOf(ptrTemp)
 	tp := ptrType.Elem()
 
@@ -260,7 +260,7 @@ func (ac *Allocator) NewString(v string) string {
 
 // NewMap use build-in allocator
 func (ac *Allocator) NewMap(mapPtr interface{}) {
-	mapPtrTemp := noescape(mapPtr)
+	mapPtrTemp := noEscape(mapPtr)
 
 	if ac.disabled {
 		tp := reflect.TypeOf(mapPtrTemp).Elem()
@@ -280,7 +280,7 @@ func (ac *Allocator) NewMap(mapPtr interface{}) {
 }
 
 func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap_ int) {
-	slicePtrTmp := noescape(slicePtr)
+	slicePtrTmp := noEscape(slicePtr)
 
 	if ac.disabled {
 		v := reflect.MakeSlice(reflect.TypeOf(slicePtrTmp).Elem(), len, cap_)
@@ -308,7 +308,7 @@ func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap_ int) {
 }
 
 func (ac *Allocator) SliceAppend(slicePtr interface{}, elem interface{}) {
-	slicePtrTmp := noescape(slicePtr)
+	slicePtrTmp := noEscape(slicePtr)
 
 	if ac.disabled {
 		s := reflect.ValueOf(slicePtrTmp).Elem()
@@ -365,7 +365,7 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, elem interface{}) {
 }
 
 func (ac *Allocator) Enum(e interface{}) interface{} {
-	temp := noescape(e)
+	temp := noEscape(e)
 	if ac.disabled {
 		r := reflect.New(reflect.TypeOf(temp))
 		r.Elem().Set(reflect.ValueOf(temp))
@@ -450,13 +450,13 @@ func (ac *Allocator) Bool(v bool) (r *bool) {
 	return
 }
 
-func (ac *Allocator) Int(v int) (r *int32) {
+func (ac *Allocator) Int(v int) (r *int) {
 	if ac.disabled {
-		r = new(int32)
+		r = new(int)
 	} else {
-		r = ac.typedNew(i32PtrType, false).(*int32)
+		r = ac.typedNew(intPtrType, false).(*int)
 	}
-	*r = int32(v)
+	*r = v
 	return
 }
 

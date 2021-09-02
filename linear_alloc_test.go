@@ -15,16 +15,16 @@ const (
 )
 
 type PbItem struct {
-	Id      *int32
-	Price   *int32
-	Class   *int32
+	Id      *int
+	Price   *int
+	Class   *int
 	Name    *string
 	Active  *bool
 	EnumVal *EnumA
 }
 
 type PbData struct {
-	Age   *int32
+	Age   *int
 	Items []*PbItem
 	InUse *PbItem
 }
@@ -33,16 +33,16 @@ func Test_LinearAlloc(t *testing.T) {
 	ac := Get()
 	var d *PbData
 	ac.New(&d)
-	d.Age = ac.Int32(11)
+	d.Age = ac.Int(11)
 
-	n := int32(3)
-	for i := int32(0); i < n; i++ {
+	n := 3
+	for i := 0; i < n; i++ {
 		var item *PbItem
 		ac.New(&item)
-		item.Id = ac.Int32(i + 1)
+		item.Id = ac.Int(i + 1)
 		item.Active = ac.Bool(true)
-		item.Price = ac.Int32(100 + i)
-		item.Class = ac.Int32(3 + i)
+		item.Price = ac.Int(100 + i)
+		item.Class = ac.Int(3 + i)
 		item.Name = ac.String("name")
 
 		ac.SliceAppend(&d.Items, item)
@@ -55,7 +55,7 @@ func Test_LinearAlloc(t *testing.T) {
 	if len(d.Items) != int(n) {
 		t.Errorf("item")
 	}
-	for i := int32(0); i < n; i++ {
+	for i := 0; i < n; i++ {
 		if *d.Items[i].Id != i+1 {
 			t.Errorf("item.id")
 		}
@@ -130,7 +130,7 @@ func Test_CheckExternalSlice(t *testing.T) {
 
 func Test_WorkWithGc(t *testing.T) {
 	type D struct {
-		v [10]*int32
+		v [10]*int
 	}
 
 	ac := Get()
@@ -141,12 +141,12 @@ func Test_WorkWithGc(t *testing.T) {
 	for i := 0; i < len(d.v); i++ {
 		d.v[i] = ac.Int(i)
 		//d.v[i] = new(int)
-		*d.v[i] = int32(i)
+		*d.v[i] = i
 		runtime.GC()
 	}
 
 	for i, p := range d.v {
-		if *p != int32(i) {
+		if *p != i {
 			t.Errorf("int %v is gced", i)
 		}
 	}
@@ -177,7 +177,7 @@ func TestLinearAllocator_NewMap(t *testing.T) {
 	ac := Get()
 
 	type D struct {
-		m map[int]*int32
+		m map[int]*int
 	}
 	data := [10]*D{}
 	for i := 0; i < len(data); i++ {
@@ -189,7 +189,7 @@ func TestLinearAllocator_NewMap(t *testing.T) {
 		runtime.GC()
 	}
 	for i, d := range data {
-		if *d.m[1] != int32(i) {
+		if *d.m[1] != i {
 			t.Fail()
 		}
 	}
@@ -217,7 +217,7 @@ func TestLinearAllocator_ExternalMap(t *testing.T) {
 func TestLinearAllocator_NewSlice(t *testing.T) {
 	DbgCheckPointers = true
 	ac := Get()
-	s := make([]*int32, 0)
+	s := make([]*int, 0)
 	ac.SliceAppend(&s, ac.Int(2))
 	if len(s) != 1 && *s[0] != 2 {
 		t.Fail()
@@ -267,11 +267,11 @@ func TestLinearAllocator_NewSlice(t *testing.T) {
 
 func TestLinearAllocator_New2(b *testing.T) {
 	ac := Get()
-	for i := int32(0); i < 3; i++ {
+	for i := 0; i < 3; i++ {
 		d := ac.New2(&PbItem{
-			Id:    ac.Int32(1 + i),
-			Class: ac.Int32(2 + i),
-			Price: ac.Int32(3 + i),
+			Id:    ac.Int(1 + i),
+			Class: ac.Int(2 + i),
+			Price: ac.Int(3 + i),
 			Name:  ac.String("test"),
 		}).(*PbItem)
 
@@ -323,7 +323,7 @@ func TestBuildInAllocator_All(t *testing.T) {
 	if *item.Id != 11 {
 		t.Fail()
 	}
-	id2 := int32(22)
+	id2 := 22
 	item = ac.New2(&PbItem{Id: &id2}).(*PbItem)
 	if *item.Id != 22 {
 		t.Fail()
@@ -369,21 +369,21 @@ func CallLinearAllocBench(gcRate int, t *testing.B) {
 		ac.New(&d)
 		d.Age = ac.Int(11)
 
-		n := int32(20)
-		for j := int32(0); j < n; j++ {
+		n := 20
+		for j := 0; j < n; j++ {
 			var item *PbItem
 			if j%2 == 0 {
 				ac.New(&item)
-				item.Id = ac.Int32(2 + j)
-				item.Price = ac.Int32(100 + j)
-				item.Class = ac.Int32(3 + j)
+				item.Id = ac.Int(2 + j)
+				item.Price = ac.Int(100 + j)
+				item.Class = ac.Int(3 + j)
 				item.Name = ac.String("name")
 				item.EnumVal = ac.Enum(EnumVal2).(*EnumA)
 			} else {
 				item = ac.New2(&PbItem{
-					Id:      ac.Int32(2 + j),
-					Price:   ac.Int32(100 + j),
-					Class:   ac.Int32(3 + j),
+					Id:      ac.Int(2 + j),
+					Price:   ac.Int(100 + j),
+					Class:   ac.Int(3 + j),
 					Name:    ac.String("name"),
 					EnumVal: ac.Enum(EnumVal2).(*EnumA),
 				}).(*PbItem)
@@ -398,7 +398,7 @@ func CallLinearAllocBench(gcRate int, t *testing.B) {
 		if len(d.Items) != int(n) {
 			t.Errorf("item")
 		}
-		for j := int32(0); j < n; j++ {
+		for j := 0; j < n; j++ {
 			if *d.Items[j].Id != 2+j {
 				t.Errorf("item.id")
 			}
@@ -417,7 +417,7 @@ func CallLinearAllocBench(gcRate int, t *testing.B) {
 func CallBuildInAcBench(gcRate int, t *testing.B) {
 	t.ReportAllocs()
 
-	newInt := func(v int32) *int32 { return &v }
+	newInt := func(v int) *int { return &v }
 	newStr := func(v string) *string { return &v }
 	newBool := func(v bool) *bool { return &v }
 	enum := func(v EnumA) *EnumA { return &v }
@@ -429,8 +429,8 @@ func CallBuildInAcBench(gcRate int, t *testing.B) {
 		d := new(PbData)
 		d.Age = newInt(11)
 
-		n := int32(20)
-		for j := int32(0); j < n; j++ {
+		n := 20
+		for j := 0; j < n; j++ {
 
 			item := new(PbItem)
 			item.Id = newInt(2 + j)
@@ -449,7 +449,7 @@ func CallBuildInAcBench(gcRate int, t *testing.B) {
 		if len(d.Items) != int(n) {
 			t.Errorf("item")
 		}
-		for j := int32(0); j < n; j++ {
+		for j := 0; j < n; j++ {
 			if *d.Items[j].Id != 2+j {
 				t.Errorf("item.id")
 			}
