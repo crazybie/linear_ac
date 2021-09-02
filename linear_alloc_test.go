@@ -88,7 +88,6 @@ func Test_CheckArray(t *testing.T) {
 		d.v[i] = new(int)
 		*d.v[i] = i
 	}
-	ac.CheckPointers()
 	ac.Release()
 }
 
@@ -102,7 +101,6 @@ func Test_CheckInternalSlice(t *testing.T) {
 	var d *D
 	ac.New(&d)
 	ac.NewSlice(&d.v, 1, 0)
-	ac.CheckPointers()
 	ac.Release()
 }
 
@@ -126,7 +124,6 @@ func Test_CheckExternalSlice(t *testing.T) {
 		d.v[i] = new(int)
 		*d.v[i] = i
 	}
-	ac.CheckPointers()
 	ac.Release()
 }
 
@@ -213,7 +210,6 @@ func TestLinearAllocator_ExternalMap(t *testing.T) {
 	var d *D
 	ac.New(&d)
 	d.m = make(map[int]*int)
-	ac.CheckPointers()
 	ac.Release()
 }
 
@@ -265,7 +261,6 @@ func TestLinearAllocator_NewSlice(t *testing.T) {
 	if len(r) != 1 {
 		t.Errorf("return slice")
 	}
-	ac.CheckPointers()
 	ac.Release()
 }
 
@@ -307,7 +302,6 @@ func TestAllocator_EnumInt32(t *testing.T) {
 
 func TestAllocator_CheckExternalEnum(t *testing.T) {
 	ac := Get()
-	defer ac.Release()
 	defer func() {
 		if err := recover(); err == nil {
 			t.Errorf("failed to check")
@@ -317,7 +311,7 @@ func TestAllocator_CheckExternalEnum(t *testing.T) {
 	var item *PbItem
 	ac.New(&item)
 	item.EnumVal = new(EnumA)
-	ac.CheckPointers()
+	ac.Release()
 }
 
 func TestBuildInAllocator_All(t *testing.T) {
