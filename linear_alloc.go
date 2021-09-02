@@ -157,7 +157,8 @@ func (ac *Allocator) New(ptrToPtr interface{}) {
 func reflect_typedmemmove(typ, dst, src unsafe.Pointer)
 
 // New2 is useful for code migration.
-// native mode is slower than new() due to the additional memory move from stack to heap.
+// native mode is slower than new() due to the additional memory move from stack to heap,
+// this is on purpose to avoid heap alloc in linear mode.
 func (ac *Allocator) New2(ptr interface{}) (ret interface{}) {
 	ptrTemp := noescape(ptr)
 	ptrType := reflect.TypeOf(ptrTemp)
