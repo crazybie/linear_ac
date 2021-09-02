@@ -165,7 +165,7 @@ func (ac *Allocator) New2(ptr interface{}) (ret interface{}) {
 
 	if ac.disabled {
 		ret = reflect.New(tp).Interface()
-		src := (*emptyInterface)(unsafe.Pointer(&ptr)).data
+		src := (*emptyInterface)(unsafe.Pointer(&ptrTemp)).data
 		dst := (*emptyInterface)(unsafe.Pointer(&ret)).data
 		reflect_typedmemmove((*emptyInterface)(unsafe.Pointer(&tp)).data, dst, src)
 	} else {
