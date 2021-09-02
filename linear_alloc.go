@@ -376,6 +376,7 @@ func (ac *Allocator) Enum(e interface{}) interface{} {
 	return r
 }
 
+// CheckPointers only support struct as root.
 func (ac *Allocator) CheckPointers() {
 	if ac.disabled {
 		return
