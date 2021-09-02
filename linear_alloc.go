@@ -56,7 +56,7 @@ var (
 	strPtrType  = reflect.TypeOf((*string)(nil))
 )
 
-/// Chunk
+// Chunk
 
 type chunk []byte
 
@@ -67,7 +67,7 @@ var chunkPool = sync.Pool{
 	},
 }
 
-/// Allocator
+// Allocator
 
 type Allocator struct {
 	disabled      bool
@@ -78,6 +78,7 @@ type Allocator struct {
 	maps          map[unsafe.Pointer]struct{}
 }
 
+// BuildInAc switches to native allocator.
 var BuildInAc = &Allocator{disabled: true}
 
 var acPool = sync.Pool{
@@ -152,7 +153,11 @@ func (ac *Allocator) New(ptrToPtr interface{}) {
 	*(*uintptr)((*emptyInterface)(unsafe.Pointer(&tmp)).data) = (uintptr)((*emptyInterface)(unsafe.Pointer(&v)).data)
 }
 
+//go:linkname reflect_typedmemmove reflect.typedmemmove
+func reflect_typedmemmove(typ, dst, src unsafe.Pointer)
+
 // New2 is useful for code migration.
+// native mode is slower than new() due to the additional memory move.
 func (ac *Allocator) New2(ptr interface{}) (ret interface{}) {
 	ptrTemp := noescape(ptr)
 	ptrType := reflect.TypeOf(ptrTemp)
@@ -160,11 +165,14 @@ func (ac *Allocator) New2(ptr interface{}) (ret interface{}) {
 
 	if ac.disabled {
 		ret = reflect.New(tp).Interface()
+		src := (*emptyInterface)(unsafe.Pointer(&ptr)).data
+		dst := (*emptyInterface)(unsafe.Pointer(&ret)).data
+		reflect_typedmemmove((*emptyInterface)(unsafe.Pointer(&tp)).data, dst, src)
 	} else {
 		ret = ac.typedNew(ptrType, false)
+		copyBytes((*emptyInterface)(unsafe.Pointer(&ptrTemp)).data, (*emptyInterface)(unsafe.Pointer(&ret)).data, int(tp.Size()))
 	}
 
-	copyBytes((*emptyInterface)(unsafe.Pointer(&ptrTemp)).data, (*emptyInterface)(unsafe.Pointer(&ret)).data, int(tp.Size()))
 	return
 }
 
