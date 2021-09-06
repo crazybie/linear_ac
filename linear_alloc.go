@@ -22,7 +22,7 @@ const (
 
 var (
 	// DbgCheckPointers checks if user allocates from build-in allocator.
-	DbgCheckPointers = true
+	DbgCheckPointers = false
 
 	DbgDisableLinearAc = false
 )
@@ -102,7 +102,9 @@ func newLinearAc() *Allocator {
 }
 
 func Get() *Allocator {
-	return acPool.Get().(*Allocator)
+	ac := acPool.Get().(*Allocator)
+	ac.disabled = DbgDisableLinearAc
+	return ac
 }
 
 func (ac *Allocator) Release() {
@@ -120,7 +122,6 @@ func (ac *Allocator) Reset() {
 
 	if DbgCheckPointers {
 		ac.CheckPointers()
-		ac.knownPointers = map[uintptr]struct{}{}
 		ac.scanObjs = ac.scanObjs[:0]
 	}
 
