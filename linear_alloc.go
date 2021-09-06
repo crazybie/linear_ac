@@ -122,6 +122,7 @@ func (ac *Allocator) Reset() {
 
 	if DbgCheckPointers {
 		ac.CheckPointers()
+		ac.knownPointers = map[uintptr]struct{}{}
 		ac.scanObjs = ac.scanObjs[:0]
 	}
 
