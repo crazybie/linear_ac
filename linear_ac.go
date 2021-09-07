@@ -213,6 +213,7 @@ start:
 			}
 			ac.chunks = append(ac.chunks, ck)
 		} else if cap(*ac.chunks[ac.curChunk+1]) < need {
+			chunkPool.Put(ac.chunks[ac.curChunk+1])
 			ck := make(chunk, 0, need)
 			ac.chunks[ac.curChunk+1] = &ck
 		}
