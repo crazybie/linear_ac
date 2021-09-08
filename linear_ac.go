@@ -16,15 +16,13 @@ import (
 	"unsafe"
 )
 
-const (
-	ChunkSize = 1024 * 4
-)
-
 var (
 	// DbgCheckPointers checks if user allocates from build-in allocator.
 	DbgCheckPointers = false
 
 	DbgDisableLinearAc = false
+
+	ChunkSize = 1024 * 4
 )
 
 type sliceHeader struct {
@@ -60,11 +58,38 @@ var (
 	strPtrType  = reflect.TypeOf((*string)(nil))
 )
 
+// Pool
+
+type Pool struct {
+	New func() interface{}
+	sync.Mutex
+	pool     []interface{}
+	allocCnt int
+}
+
+func (p *Pool) Get() interface{} {
+	p.Lock()
+	defer p.Unlock()
+	if len(p.pool) == 0 {
+		p.allocCnt++
+		return p.New()
+	}
+	r := p.pool[len(p.pool)-1]
+	p.pool = p.pool[:len(p.pool)-1]
+	return r
+}
+
+func (p *Pool) Put(v interface{}) {
+	p.Lock()
+	defer p.Unlock()
+	p.pool = append(p.pool, v)
+}
+
 // Chunk
 
 type chunk []byte
 
-var chunkPool = sync.Pool{
+var chunkPool = Pool{
 	New: func() interface{} {
 		ck := make(chunk, 0, ChunkSize)
 		return &ck
@@ -85,7 +110,7 @@ type Allocator struct {
 // BuildInAc switches to native allocator.
 var BuildInAc = &Allocator{disabled: true}
 
-var acPool = sync.Pool{
+var acPool = Pool{
 	New: func() interface{} {
 		return newLinearAc()
 	},
@@ -136,6 +161,8 @@ func (ac *Allocator) Reset() {
 	for k := range ac.maps {
 		delete(ac.maps, k)
 	}
+
+	ac.disabled = DbgDisableLinearAc
 }
 
 func noEscape(p interface{}) (ret interface{}) {
@@ -324,15 +351,16 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, elem interface{}) {
 	if refSlicePtrTp.Kind() != reflect.Ptr || refSlicePtrTp.Elem().Kind() != reflect.Slice {
 		panic(fmt.Errorf("expect pointer to slice"))
 	}
-	refElemPtrTp := reflect.TypeOf(elem)
-	if refSlicePtrTp.Elem().Elem() != refElemPtrTp {
+	refInputTp := reflect.TypeOf(elem)
+	refElemTp := refSlicePtrTp.Elem().Elem()
+	if refElemTp != refInputTp && elem != nil {
 		panic(fmt.Errorf("elem type not match with slice"))
 	}
 
 	sliceEface := (*emptyInterface)(unsafe.Pointer(&slicePtrTmp))
 	slice_ := (*sliceHeader)(sliceEface.data)
 	elemEface := (*emptyInterface)(unsafe.Pointer(&elem))
-	elemSz := int(refElemPtrTp.Size())
+	elemSz := int(refElemTp.Size())
 
 	// grow
 	if slice_.Len >= slice_.Cap {
@@ -358,7 +386,7 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, elem interface{}) {
 	// append
 	if slice_.Len < slice_.Cap {
 		d := unsafe.Pointer(uintptr(slice_.Data) + uintptr(elemSz)*uintptr(slice_.Len))
-		if refElemPtrTp.Kind() == reflect.Ptr {
+		if refElemTp.Kind() == reflect.Ptr {
 			*(*uintptr)(d) = (uintptr)(elemEface.data)
 		} else {
 			copyBytes(elemEface.data, d, elemSz)
@@ -374,8 +402,9 @@ func (ac *Allocator) Enum(e interface{}) interface{} {
 		r.Elem().Set(reflect.ValueOf(temp))
 		return r.Interface()
 	}
-	r := ac.typedNew(reflect.PtrTo(reflect.TypeOf(temp)), false)
-	*((*[2]*uintptr)(unsafe.Pointer(&r)))[1] = *(*uintptr)((*emptyInterface)(unsafe.Pointer(&temp)).data)
+	tp := reflect.TypeOf(temp)
+	r := ac.typedNew(reflect.PtrTo(tp), false)
+	copyBytes((*emptyInterface)(unsafe.Pointer(&temp)).data, (*emptyInterface)(unsafe.Pointer(&r)).data, int(tp.Size()))
 	return r
 }
 

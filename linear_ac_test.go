@@ -262,6 +262,15 @@ func TestLinearAllocator_NewSlice(t *testing.T) {
 	if len(r) != 1 {
 		t.Errorf("return slice")
 	}
+
+	{
+		var s []*PbItem
+		ac.SliceAppend(&s, nil)
+		if len(s) != 1 || s[0] != nil {
+			t.Errorf("nil")
+		}
+	}
+
 	ac.Release()
 }
 
@@ -291,9 +300,9 @@ func TestLinearAllocator_New2(b *testing.T) {
 	ac.Release()
 }
 
-func TestAllocator_EnumInt32(t *testing.T) {
+func TestAllocator_Enum(t *testing.T) {
 	ac := Get()
-	e := EnumVal1
+	e := EnumVal2
 	v := ac.Enum(e).(*EnumA)
 	if *v != e {
 		t.Fail()
@@ -354,10 +363,14 @@ func TestBuildInAllocator_All(t *testing.T) {
 func CallLinearAllocBench(gcRate int, t *testing.B) {
 	t.ReportAllocs()
 	DbgCheckPointers = false
+	preChunkSz := ChunkSize
+	// make gc happy
+	ChunkSize = preChunkSz * 8
 	ac := Get()
 	defer func() {
 		ac.Release()
 		DbgCheckPointers = true
+		ChunkSize = preChunkSz
 	}()
 
 	keepSameWithBuildInBench := make([]*PbData, 0, t.N)
@@ -409,8 +422,6 @@ func CallLinearAllocBench(gcRate int, t *testing.B) {
 		}
 
 		keepSameWithBuildInBench = append(keepSameWithBuildInBench, d)
-
-		ac.Reset()
 	}
 }
 
