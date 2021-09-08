@@ -73,22 +73,23 @@ func main() {
 Results from benchmark tests:
 ![bench](./bench.png)
 ``` 
-cpu: Intel(R) Core(TM) i7-10510U CPU @ 1.80GHz
+goos: linux
+goarch: amd64
+pkg: oops/common/linear_ac
 Benchmark_linearAllocNoGC
-Benchmark_linearAllocNoGC-8       429055              2806 ns/op               8 B/op          0 allocs/op
+Benchmark_linearAllocNoGC-6    	  294457	      3476 ns/op	     447 B/op	       0 allocs/op
 Benchmark_buildInAllocNoGc
-Benchmark_buildInAllocNoGc-8      333940              3904 ns/op            2244 B/op        148 allocs/op
+Benchmark_buildInAllocNoGc-6   	  335590	      3484 ns/op	    2488 B/op	     148 allocs/op
 Benchmark_linearAllocGc
-Benchmark_linearAllocGc-8         422084              2844 ns/op               8 B/op          0 allocs/op
+Benchmark_linearAllocGc-6      	  352168	      3442 ns/op	     405 B/op	       0 allocs/op
 Benchmark_buildInAllocGc
-Benchmark_buildInAllocGc-8        352863              5918 ns/op            2244 B/op        148 allocs/op
+Benchmark_buildInAllocGc-6     	  285265	      3856 ns/op	    2488 B/op	     148 allocs/op
 Benchmark_linearAllocGc2
-Benchmark_linearAllocGc2-8        277922              4003 ns/op               8 B/op          0 allocs/op
+Benchmark_linearAllocGc2-6     	  289704	      4151 ns/op	       8 B/op	       0 allocs/op
 Benchmark_buildInAllocGc2
-Benchmark_buildInAllocGc2-8       265830             20012 ns/op            2244 B/op        148 allocs/op
+Benchmark_buildInAllocGc2-6    	  203284	     10718 ns/op	    2488 B/op	     148 allocs/op
 Benchmark_linearAllocGc3
-Benchmark_linearAllocGc3-8        220708              5783 ns/op               9 B/op          0 allocs/op
+Benchmark_linearAllocGc3-6     	  103095	     10722 ns/op	       8 B/op	       0 allocs/op
 Benchmark_buildInAllocGc3
-Benchmark_buildInAllocGc3-8       145726             94274 ns/op            2244 B/op        148 allocs/op
-
+Benchmark_buildInAllocGc3-6    	   82090	     40442 ns/op	    2488 B/op	     148 allocs/op
 ```
