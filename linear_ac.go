@@ -63,15 +63,13 @@ var (
 type Pool struct {
 	New func() interface{}
 	sync.Mutex
-	pool     []interface{}
-	allocCnt int
+	pool []interface{}
 }
 
 func (p *Pool) Get() interface{} {
 	p.Lock()
 	defer p.Unlock()
 	if len(p.pool) == 0 {
-		p.allocCnt++
 		return p.New()
 	}
 	r := p.pool[len(p.pool)-1]
@@ -128,7 +126,6 @@ func newLinearAc() *Allocator {
 
 func Get() *Allocator {
 	ac := acPool.Get().(*Allocator)
-	ac.disabled = DbgDisableLinearAc
 	return ac
 }
 

@@ -365,7 +365,7 @@ func CallLinearAllocBench(gcRate int, t *testing.B) {
 	DbgCheckPointers = false
 	preChunkSz := ChunkSize
 	// make gc happy
-	ChunkSize = preChunkSz * 8
+	ChunkSize = 1024 * 64
 	ac := Get()
 	defer func() {
 		ac.Release()
