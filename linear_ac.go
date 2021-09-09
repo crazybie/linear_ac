@@ -18,12 +18,9 @@ import (
 )
 
 var (
-	// DbgCheckPointers checks if user allocates from build-in allocator.
-	DbgCheckPointers = false
-
+	DbgMode            = false
 	DbgDisableLinearAc = false
-
-	ChunkSize = 1024 * 4
+	ChunkSize          = 1024 * 8
 )
 
 type sliceHeader struct {
@@ -62,8 +59,8 @@ var (
 // Pool
 
 type Pool struct {
-	New func() interface{}
 	sync.Mutex
+	New  func() interface{}
 	pool []interface{}
 }
 
@@ -83,7 +80,7 @@ func (p *Pool) Put(v interface{}) {
 	defer p.Unlock()
 	p.pool = append(p.pool, v)
 
-	if DbgCheckPointers {
+	if DbgMode {
 		// make pointers live longer to reduce the memory overwriting chances by
 		// pushing chunk to the front, useful to diagnosis use-after-free bugs.
 		s := p.pool
@@ -100,7 +97,13 @@ type chunk []byte
 
 var chunkPool = Pool{
 	New: func() interface{} {
-		ck := make(chunk, 0, ChunkSize)
+		sz := ChunkSize
+		if DbgMode {
+			// Use more chunks to reduce memory overwriting chance.
+			// useful to diagnosis the use-after-free bugs.
+			sz /= 8
+		}
+		ck := make(chunk, 0, sz)
 		return &ck
 	},
 }
@@ -149,7 +152,7 @@ func (ac *Allocator) Reset() {
 		return
 	}
 
-	if DbgCheckPointers {
+	if DbgMode {
 		ac.checkPointers()
 		ac.scanObjs = ac.scanObjs[:0]
 	}
@@ -216,7 +219,7 @@ func (ac *Allocator) typedNew(ptrTp reflect.Type, zero bool) (ret interface{}) {
 	retEface.typ = (*emptyInterface)(unsafe.Pointer(&ptrTp)).data
 	retEface.data = ptr
 
-	if DbgCheckPointers {
+	if DbgMode {
 		if objType.Kind() == reflect.Struct {
 			ac.scanObjs = append(ac.scanObjs, ret)
 		}
@@ -430,7 +433,10 @@ func (ac *Allocator) checkRecursively(pe reflect.Value) error {
 			if pe.Elem().Type().Kind() == reflect.Struct {
 				return ac.checkRecursively(pe.Elem())
 			}
-			pe.Set(reflect.Zero(pe.Type()))
+			// Use 1 instead of nil or MaxUint64:
+			// 1. make non-nil check pass.
+			// 2. generate a recoverable panic.
+			*(*uintptr)(unsafe.Pointer(pe.UnsafeAddr())) = 1
 		}
 		return nil
 	}
@@ -445,7 +451,6 @@ func (ac *Allocator) checkRecursively(pe reflect.Value) error {
 				if err := ac.checkRecursively(f); err != nil {
 					return fmt.Errorf("%v: %v", fieldName(i), err)
 				}
-				f.Set(reflect.Zero(f.Type()))
 
 			case reflect.Slice:
 				h := (*sliceHeader)(unsafe.Pointer(f.UnsafeAddr()))

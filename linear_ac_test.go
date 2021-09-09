@@ -71,7 +71,7 @@ func Test_LinearAlloc(t *testing.T) {
 }
 
 func Test_CheckArray(t *testing.T) {
-	DbgCheckPointers = true
+	DbgMode = true
 	ac := Get()
 	defer func() {
 		if err := recover(); err == nil {
@@ -93,7 +93,7 @@ func Test_CheckArray(t *testing.T) {
 }
 
 func Test_CheckInternalSlice(t *testing.T) {
-	DbgCheckPointers = true
+	DbgMode = true
 	ac := Get()
 
 	type D struct {
@@ -106,7 +106,7 @@ func Test_CheckInternalSlice(t *testing.T) {
 }
 
 func Test_CheckExternalSlice(t *testing.T) {
-	DbgCheckPointers = true
+	DbgMode = true
 	ac := Get()
 	defer func() {
 		if err := recover(); err == nil {
@@ -129,9 +129,9 @@ func Test_CheckExternalSlice(t *testing.T) {
 }
 
 func TestUseAfterFree_Pointer(t *testing.T) {
-	DbgCheckPointers = true
+	DbgMode = true
 	defer func() {
-		DbgCheckPointers = false
+		DbgMode = false
 		if err := recover(); err == nil {
 			t.Errorf("failed to check")
 		}
@@ -147,9 +147,9 @@ func TestUseAfterFree_Pointer(t *testing.T) {
 }
 
 func TestUseAfterFree_Slice(t *testing.T) {
-	DbgCheckPointers = true
+	DbgMode = true
 	defer func() {
-		DbgCheckPointers = false
+		DbgMode = false
 		if err := recover(); err == nil {
 			t.Errorf("failed to check")
 		}
@@ -236,7 +236,7 @@ func TestLinearAllocator_NewMap(t *testing.T) {
 }
 
 func TestLinearAllocator_ExternalMap(t *testing.T) {
-	DbgCheckPointers = true
+	DbgMode = true
 	ac := Get()
 	defer func() {
 		if err := recover(); err == nil {
@@ -254,7 +254,7 @@ func TestLinearAllocator_ExternalMap(t *testing.T) {
 }
 
 func TestLinearAllocator_NewSlice(t *testing.T) {
-	DbgCheckPointers = true
+	DbgMode = true
 	ac := Get()
 	s := make([]*int, 0)
 	ac.SliceAppend(&s, ac.Int(2))
@@ -401,14 +401,14 @@ func TestBuildInAllocator_All(t *testing.T) {
 
 func CallLinearAllocBench(gcRate int, t *testing.B) {
 	t.ReportAllocs()
-	DbgCheckPointers = false
+	DbgMode = false
 	preChunkSz := ChunkSize
 	// make gc happy
 	ChunkSize = 1024 * 64
 	ac := Get()
 	defer func() {
 		ac.Release()
-		DbgCheckPointers = true
+		DbgMode = true
 		ChunkSize = preChunkSz
 	}()
 
