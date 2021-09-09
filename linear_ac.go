@@ -11,6 +11,7 @@ package linear_ac
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"sync"
 	"unsafe"
@@ -81,6 +82,16 @@ func (p *Pool) Put(v interface{}) {
 	p.Lock()
 	defer p.Unlock()
 	p.pool = append(p.pool, v)
+
+	if DbgCheckPointers {
+		// make pointers live longer to reduce the memory overwriting chances by
+		// pushing chunk to the front, useful to diagnosis use-after-free bugs.
+		s := p.pool
+		for i := len(s) - 1; i >= 1; i-- {
+			s[i-1] = s[i]
+		}
+		s[0] = v
+	}
 }
 
 // Chunk
@@ -97,12 +108,11 @@ var chunkPool = Pool{
 // Allocator
 
 type Allocator struct {
-	disabled      bool
-	chunks        []*chunk
-	curChunk      int
-	scanObjs      []interface{}
-	knownPointers map[uintptr]struct{}
-	maps          map[unsafe.Pointer]struct{}
+	disabled bool
+	chunks   []*chunk
+	curChunk int
+	scanObjs []interface{}
+	maps     map[unsafe.Pointer]struct{}
 }
 
 // BuildInAc switches to native allocator.
@@ -117,9 +127,6 @@ var acPool = Pool{
 func newLinearAc() *Allocator {
 	ac := &Allocator{
 		disabled: DbgDisableLinearAc,
-	}
-	if DbgCheckPointers {
-		ac.knownPointers = make(map[uintptr]struct{})
 	}
 	return ac
 }
@@ -143,8 +150,7 @@ func (ac *Allocator) Reset() {
 	}
 
 	if DbgCheckPointers {
-		ac.CheckPointers()
-		ac.knownPointers = map[uintptr]struct{}{}
+		ac.checkPointers()
 		ac.scanObjs = ac.scanObjs[:0]
 	}
 
@@ -214,7 +220,6 @@ func (ac *Allocator) typedNew(ptrTp reflect.Type, zero bool) (ret interface{}) {
 		if objType.Kind() == reflect.Struct {
 			ac.scanObjs = append(ac.scanObjs, ret)
 		}
-		ac.knownPointers[uintptr(ptr)] = struct{}{}
 	}
 	return
 }
@@ -329,9 +334,6 @@ func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap_ int) {
 	slice_.Data = ac.alloc(cap_*int(refSlicePtrType.Elem().Elem().Size()), false)
 	slice_.Len = len
 	slice_.Cap = cap_
-	if DbgCheckPointers {
-		ac.knownPointers[uintptr(slice_.Data)] = struct{}{}
-	}
 }
 
 func (ac *Allocator) SliceAppend(slicePtr interface{}, elem interface{}) {
@@ -373,11 +375,6 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, elem interface{}) {
 		slice_.Data = ac.alloc(slice_.Cap*elemSz, false)
 		copyBytes(pre.Data, slice_.Data, pre.Len*elemSz)
 		slice_.Len = pre.Len
-
-		if DbgCheckPointers {
-			delete(ac.knownPointers, uintptr(pre.Data))
-			ac.knownPointers[uintptr(slice_.Data)] = struct{}{}
-		}
 	}
 
 	// append
@@ -405,11 +402,18 @@ func (ac *Allocator) Enum(e interface{}) interface{} {
 	return r
 }
 
-// CheckPointers only support struct as root.
-func (ac *Allocator) CheckPointers() {
-	if ac.disabled {
-		return
+func (ac *Allocator) internalPointer(addr uintptr) bool {
+	for _, c := range ac.chunks {
+		h := (*sliceHeader)(unsafe.Pointer(c))
+		if addr >= uintptr(h.Data) && addr < uintptr(h.Data)+uintptr(h.Cap) {
+			return true
+		}
 	}
+	return false
+}
+
+// checkPointers only support struct as root.
+func (ac *Allocator) checkPointers() {
 	for _, ptr := range ac.scanObjs {
 		if err := ac.checkRecursively(reflect.ValueOf(ptr)); err != nil {
 			panic(err)
@@ -420,12 +424,13 @@ func (ac *Allocator) CheckPointers() {
 func (ac *Allocator) checkRecursively(pe reflect.Value) error {
 	if pe.Kind() == reflect.Ptr {
 		if !pe.IsNil() {
-			if _, ok := ac.knownPointers[pe.Pointer()]; !ok {
+			if !ac.internalPointer(pe.Pointer()) {
 				return fmt.Errorf("unexpected external pointer: %+v", pe)
 			}
 			if pe.Elem().Type().Kind() == reflect.Struct {
 				return ac.checkRecursively(pe.Elem())
 			}
+			pe.Set(reflect.Zero(pe.Type()))
 		}
 		return nil
 	}
@@ -440,20 +445,31 @@ func (ac *Allocator) checkRecursively(pe reflect.Value) error {
 				if err := ac.checkRecursively(f); err != nil {
 					return fmt.Errorf("%v: %v", fieldName(i), err)
 				}
+				f.Set(reflect.Zero(f.Type()))
+
 			case reflect.Slice:
+				h := (*sliceHeader)(unsafe.Pointer(f.UnsafeAddr()))
 				if f.Len() > 0 {
-					dataPtr := (uintptr)((*sliceHeader)(unsafe.Pointer(f.UnsafeAddr())).Data)
-					if _, ok := ac.knownPointers[dataPtr]; !ok {
+					if !ac.internalPointer((uintptr)(h.Data)) {
 						return fmt.Errorf("%s: unexpected external pointer: %s", fieldName(i), f.String())
 					}
+					for j := 0; j < f.Len(); j++ {
+						if err := ac.checkRecursively(f.Index(j)); err != nil {
+							return fmt.Errorf("%v: %v", fieldName(i), err)
+						}
+					}
 				}
-				fallthrough
+				h.Data = nil
+				h.Len = math.MaxInt32
+				h.Cap = math.MaxInt32
+
 			case reflect.Array:
 				for j := 0; j < f.Len(); j++ {
 					if err := ac.checkRecursively(f.Index(j)); err != nil {
 						return fmt.Errorf("%v: %v", fieldName(i), err)
 					}
 				}
+
 			case reflect.Map:
 				m := *(*unsafe.Pointer)(unsafe.Pointer(f.UnsafeAddr()))
 				if _, ok := ac.maps[m]; !ok {

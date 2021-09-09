@@ -128,6 +128,45 @@ func Test_CheckExternalSlice(t *testing.T) {
 	ac.Release()
 }
 
+func TestUseAfterFree_Pointer(t *testing.T) {
+	DbgCheckPointers = true
+	defer func() {
+		DbgCheckPointers = false
+		if err := recover(); err == nil {
+			t.Errorf("failed to check")
+		}
+	}()
+	ac := Get()
+	var d *PbData
+	ac.New(&d)
+	d.Age = ac.Int(11)
+	ac.Release()
+	if *d.Age == 11 {
+		t.Errorf("not panic")
+	}
+}
+
+func TestUseAfterFree_Slice(t *testing.T) {
+	DbgCheckPointers = true
+	defer func() {
+		DbgCheckPointers = false
+		if err := recover(); err == nil {
+			t.Errorf("failed to check")
+		}
+	}()
+
+	ac := Get()
+	var d *PbData
+	ac.New(&d)
+	ac.NewSlice(&d.Items, 1, 1)
+	ac.Release()
+
+	if cap(d.Items) == 1 {
+		t.Errorf("not panic")
+	}
+	d.Items[0] = new(PbItem)
+}
+
 func Test_WorkWithGc(t *testing.T) {
 	type D struct {
 		v [10]*int
