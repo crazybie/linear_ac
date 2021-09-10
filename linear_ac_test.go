@@ -199,7 +199,7 @@ func TestLinearAllocator_NewSlice(t *testing.T) {
 	ac.Release()
 }
 
-func TestLinearAllocator_New2(b *testing.T) {
+func TestLinearAllocator_NewCopy(b *testing.T) {
 	ac := BindNew()
 	for i := 0; i < 3; i++ {
 		d := ac.NewCopy(&PbItem{
@@ -298,15 +298,8 @@ func TestBindAc(t *testing.T) {
 func CallLinearAllocBench(gcRate int, t *testing.B) {
 	t.ReportAllocs()
 	DbgMode = false
-	preChunkSz := ChunkSize
-	// make gc happy
-	ChunkSize = 1024 * 64
 	ac := BindNew()
-	defer func() {
-		ac.Release()
-		DbgMode = true
-		ChunkSize = preChunkSz
-	}()
+	defer ac.Release()
 
 	keepSameWithBuildInBench := make([]*PbData, 0, t.N)
 	runtime.GC()

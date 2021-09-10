@@ -24,9 +24,9 @@ import (
 )
 
 var (
-	DbgMode            = false
-	DbgDisableLinearAc = false
-	ChunkSize          = 1024 * 8
+	DbgMode         = false
+	DisableLinearAc = false
+	ChunkSize       = 1024 * 32
 )
 
 type sliceHeader struct {
@@ -41,15 +41,15 @@ type stringHeader struct {
 }
 
 type emptyInterface struct {
-	typ  unsafe.Pointer
-	data unsafe.Pointer
+	Type unsafe.Pointer
+	Data unsafe.Pointer
 }
 
 //go:linkname reflect_typedmemmove reflect.typedmemmove
 func reflect_typedmemmove(typ, dst, src unsafe.Pointer)
 
 var (
-	uintptrSize = unsafe.Sizeof(uintptr(0))
+	ptrSize = int(unsafe.Sizeof(uintptr(0)))
 
 	boolPtrType = reflect.TypeOf((*bool)(nil))
 	intPtrType  = reflect.TypeOf((*int)(nil))
@@ -76,19 +76,18 @@ func goRoutineId() uint64 {
 		return data[int(offset)]
 	}
 	id := goRoutineIdSlow()
-	matchedCount := 0
-	matchedOffset := 0
+	var n, offset int
 	for idx, v := range data[:] {
 		if v == id {
-			matchedOffset = idx
-			matchedCount++
-			if matchedCount >= 2 {
+			offset = idx
+			n++
+			if n >= 2 {
 				break
 			}
 		}
 	}
-	if matchedCount == 1 {
-		atomic.StoreUint64(&goRoutineIdOffset, uint64(matchedOffset))
+	if n == 1 {
+		atomic.StoreUint64(&goRoutineIdOffset, uint64(offset))
 	}
 	return id
 }
@@ -97,23 +96,60 @@ func goRoutineIdSlow() uint64 {
 	var buf [64]byte
 	n := runtime.Stack(buf[:], false)
 	stk := strings.TrimPrefix(string(buf[:n]), "goroutine ")
-	idField := strings.Fields(stk)[0]
-	if id, err := strconv.Atoi(idField); err != nil {
-		panic(fmt.Errorf("invalid goroutine id: %v, err: %v", idField, err))
+	if id, err := strconv.Atoi(strings.Fields(stk)[0]); err != nil {
+		panic(err)
 	} else {
 		return uint64(id)
 	}
 }
 
-// Pool
+// Helpers
 
-type Pool struct {
+func add(p unsafe.Pointer, offset int) unsafe.Pointer {
+	return unsafe.Pointer(uintptr(p) + uintptr(offset))
+}
+
+func noEscape(p interface{}) (ret interface{}) {
+	r := *(*[2]uintptr)(unsafe.Pointer(&p))
+	*(*[2]uintptr)(unsafe.Pointer(&ret)) = r
+	return
+}
+
+func data(i interface{}) unsafe.Pointer {
+	return (*emptyInterface)(unsafe.Pointer(&i)).Data
+}
+
+func copyBytes(src, dst unsafe.Pointer, len int) {
+	alignedEnd := len / ptrSize * ptrSize
+	i := 0
+	for ; i < alignedEnd; i += ptrSize {
+		*(*uintptr)(add(dst, i)) = *(*uintptr)(add(src, i))
+	}
+	for ; i < len; i++ {
+		*(*byte)(add(dst, i)) = *(*byte)(add(src, i))
+	}
+}
+
+func clearBytes(dst unsafe.Pointer, len int) {
+	alignedEnd := len / ptrSize * ptrSize
+	i := 0
+	for ; i < alignedEnd; i += ptrSize {
+		*(*uintptr)(add(dst, i)) = 0
+	}
+	for ; i < len; i++ {
+		*(*byte)(add(dst, i)) = 0
+	}
+}
+
+// syncPool
+
+type syncPool struct {
 	sync.Mutex
 	New  func() interface{}
 	pool []interface{}
 }
 
-func (p *Pool) Get() interface{} {
+func (p *syncPool) get() interface{} {
 	p.Lock()
 	defer p.Unlock()
 	if len(p.pool) == 0 {
@@ -124,7 +160,7 @@ func (p *Pool) Get() interface{} {
 	return r
 }
 
-func (p *Pool) Put(v interface{}) {
+func (p *syncPool) put(v interface{}) {
 	p.Lock()
 	defer p.Unlock()
 	p.pool = append(p.pool, v)
@@ -134,7 +170,7 @@ func (p *Pool) Put(v interface{}) {
 
 type chunk []byte
 
-var chunkPool = Pool{
+var chunkPool = syncPool{
 	New: func() interface{} {
 		ck := make(chunk, 0, ChunkSize)
 		return &ck
@@ -159,7 +195,7 @@ type Allocator struct {
 // buildInAc switches to native allocator.
 var buildInAc = &Allocator{disabled: true}
 
-var acPool = Pool{
+var acPool = syncPool{
 	New: func() interface{} {
 		return NewLinearAc()
 	},
@@ -167,7 +203,8 @@ var acPool = Pool{
 
 func NewLinearAc() *Allocator {
 	ac := &Allocator{
-		disabled: DbgDisableLinearAc,
+		disabled: DisableLinearAc,
+		maps:     map[unsafe.Pointer]struct{}{},
 	}
 	return ac
 }
@@ -177,7 +214,7 @@ func NewLinearAc() *Allocator {
 var acMap = sync.Map{}
 
 func BindNew() *Allocator {
-	ac := acPool.Get().(*Allocator)
+	ac := acPool.get().(*Allocator)
 	acMap.Store(goRoutineId(), ac)
 	return ac
 }
@@ -201,7 +238,7 @@ func (ac *Allocator) Release() {
 	}
 	ac.Unbind()
 	ac.reset()
-	acPool.Put(ac)
+	acPool.put(ac)
 }
 
 func (ac *Allocator) reset() {
@@ -219,7 +256,7 @@ func (ac *Allocator) reset() {
 		if DbgMode {
 			diagnosisChunkPool.Put(ck)
 		} else {
-			chunkPool.Put(ck)
+			chunkPool.put(ck)
 		}
 	}
 	// clear all ref
@@ -234,13 +271,7 @@ func (ac *Allocator) reset() {
 		delete(ac.maps, k)
 	}
 
-	ac.disabled = DbgDisableLinearAc
-}
-
-func noEscape(p interface{}) (ret interface{}) {
-	r := *(*[2]uintptr)(unsafe.Pointer(&p))
-	*(*[2]uintptr)(unsafe.Pointer(&ret)) = r
-	return
+	ac.disabled = DisableLinearAc
 }
 
 func (ac *Allocator) New(ptrToPtr interface{}) {
@@ -254,7 +285,7 @@ func (ac *Allocator) New(ptrToPtr interface{}) {
 
 	tp := reflect.TypeOf(tmp).Elem()
 	v := ac.typedNew(tp, true)
-	*(*uintptr)((*emptyInterface)(unsafe.Pointer(&tmp)).data) = (uintptr)((*emptyInterface)(unsafe.Pointer(&v)).data)
+	reflect.ValueOf(tmp).Elem().Set(reflect.ValueOf(v))
 }
 
 // NewCopy is useful for code migration.
@@ -267,24 +298,18 @@ func (ac *Allocator) NewCopy(ptr interface{}) (ret interface{}) {
 
 	if ac.disabled {
 		ret = reflect.New(tp).Interface()
-		src := (*emptyInterface)(unsafe.Pointer(&ptrTemp)).data
-		dst := (*emptyInterface)(unsafe.Pointer(&ret)).data
-		reflect_typedmemmove((*emptyInterface)(unsafe.Pointer(&tp)).data, dst, src)
+		reflect_typedmemmove(data(tp), data(ret), data(ptrTemp))
 	} else {
 		ret = ac.typedNew(ptrType, false)
-		copyBytes((*emptyInterface)(unsafe.Pointer(&ptrTemp)).data, (*emptyInterface)(unsafe.Pointer(&ret)).data, int(tp.Size()))
+		copyBytes(data(ptrTemp), data(ret), int(tp.Size()))
 	}
-
 	return
 }
 
 func (ac *Allocator) typedNew(ptrTp reflect.Type, zero bool) (ret interface{}) {
 	objType := ptrTp.Elem()
 	ptr := ac.alloc(int(objType.Size()), zero)
-	retEface := (*emptyInterface)(unsafe.Pointer(&ret))
-	retEface.typ = (*emptyInterface)(unsafe.Pointer(&ptrTp)).data
-	retEface.data = ptr
-
+	*(*emptyInterface)(unsafe.Pointer(&ret)) = emptyInterface{data(ptrTp), ptr}
 	if DbgMode {
 		if objType.Kind() == reflect.Struct {
 			ac.scanObjs = append(ac.scanObjs, ret)
@@ -295,7 +320,7 @@ func (ac *Allocator) typedNew(ptrTp reflect.Type, zero bool) (ret interface{}) {
 
 func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 	if len(ac.chunks) == 0 {
-		ac.chunks = append(ac.chunks, chunkPool.Get().(*chunk))
+		ac.chunks = append(ac.chunks, chunkPool.get().(*chunk))
 	}
 start:
 	cur := ac.chunks[ac.curChunk]
@@ -307,11 +332,11 @@ start:
 				c := make(chunk, 0, need)
 				ck = &c
 			} else {
-				ck = chunkPool.Get().(*chunk)
+				ck = chunkPool.get().(*chunk)
 			}
 			ac.chunks = append(ac.chunks, ck)
 		} else if cap(*ac.chunks[ac.curChunk+1]) < need {
-			chunkPool.Put(ac.chunks[ac.curChunk+1])
+			chunkPool.put(ac.chunks[ac.curChunk+1])
 			ck := make(chunk, 0, need)
 			ac.chunks[ac.curChunk+1] = &ck
 		}
@@ -319,33 +344,11 @@ start:
 		goto start
 	}
 	*cur = (*cur)[:used+need]
-	ptr := unsafe.Pointer((uintptr)((*sliceHeader)(unsafe.Pointer(cur)).Data) + uintptr(used))
+	ptr := add((*sliceHeader)(unsafe.Pointer(cur)).Data, used)
 	if zero {
 		clearBytes(ptr, need)
 	}
 	return ptr
-}
-
-func copyBytes(src, dst unsafe.Pointer, len int) {
-	alignedEnd := uintptr(len) / uintptrSize * uintptrSize
-	i := uintptr(0)
-	for ; i < alignedEnd; i += uintptrSize {
-		*(*uintptr)(unsafe.Pointer(uintptr(dst) + i)) = *(*uintptr)(unsafe.Pointer(uintptr(src) + i))
-	}
-	for ; i < uintptr(len); i++ {
-		*(*byte)(unsafe.Pointer(uintptr(dst) + i)) = *(*byte)(unsafe.Pointer(uintptr(src) + i))
-	}
-}
-
-func clearBytes(dst unsafe.Pointer, len int) {
-	alignedEnd := uintptr(len) / uintptrSize * uintptrSize
-	i := uintptr(0)
-	for ; i < alignedEnd; i += uintptrSize {
-		*(*uintptr)(unsafe.Pointer(uintptr(dst) + i)) = 0
-	}
-	for ; i < uintptr(len); i++ {
-		*(*byte)(unsafe.Pointer(uintptr(dst) + i)) = 0
-	}
 }
 
 func (ac *Allocator) NewString(v string) string {
@@ -370,42 +373,34 @@ func (ac *Allocator) NewMap(mapPtr interface{}) {
 	}
 
 	m := reflect.MakeMap(reflect.TypeOf(mapPtrTemp).Elem())
-	i := m.Interface()
-	v := (*emptyInterface)(unsafe.Pointer(&i))
 	reflect.ValueOf(mapPtrTemp).Elem().Set(m)
-
-	if ac.maps == nil {
-		ac.maps = make(map[unsafe.Pointer]struct{})
-	}
-	ac.maps[v.data] = struct{}{}
+	ac.maps[data(m.Interface())] = struct{}{}
 }
 
-func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap_ int) {
+func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap int) {
 	slicePtrTmp := noEscape(slicePtr)
 
 	if ac.disabled {
-		v := reflect.MakeSlice(reflect.TypeOf(slicePtrTmp).Elem(), len, cap_)
+		v := reflect.MakeSlice(reflect.TypeOf(slicePtrTmp).Elem(), len, cap)
 		reflect.ValueOf(slicePtrTmp).Elem().Set(v)
 		return
 	}
 
-	refSlicePtrType := reflect.TypeOf(slicePtrTmp)
-	if refSlicePtrType.Kind() != reflect.Ptr || refSlicePtrType.Elem().Kind() != reflect.Slice {
-		panic(fmt.Errorf("need a pointer to slice"))
+	slicePtrType := reflect.TypeOf(slicePtrTmp)
+	if slicePtrType.Kind() != reflect.Ptr || slicePtrType.Elem().Kind() != reflect.Slice {
+		panic("need a pointer to slice")
 	}
 
-	if cap_ < len {
-		cap_ = len
+	slice := (*sliceHeader)(data(slicePtrTmp))
+	if cap < len {
+		cap = len
 	}
-
-	sliceEface := (*emptyInterface)(unsafe.Pointer(&slicePtrTmp))
-	slice_ := (*sliceHeader)(sliceEface.data)
-	slice_.Data = ac.alloc(cap_*int(refSlicePtrType.Elem().Elem().Size()), false)
-	slice_.Len = len
-	slice_.Cap = cap_
+	slice.Data = ac.alloc(cap*int(slicePtrType.Elem().Elem().Size()), false)
+	slice.Len = len
+	slice.Cap = cap
 }
 
-// Useful to create simple slice (simple type as element)
+// CopySlice is useful to create simple slice (simple type as element)
 func (ac *Allocator) CopySlice(slice interface{}) (ret interface{}) {
 	sliceTmp := noEscape(slice)
 	if ac.disabled {
@@ -413,27 +408,25 @@ func (ac *Allocator) CopySlice(slice interface{}) (ret interface{}) {
 	}
 
 	sliceType := reflect.TypeOf(sliceTmp)
-	elemType := sliceType.Elem()
 	if sliceType.Kind() != reflect.Slice {
-		panic(fmt.Errorf("need a slice"))
+		panic("need a slice")
 	}
+	elemType := sliceType.Elem()
 	switch elemType.Kind() {
 	case reflect.Int, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint32, reflect.Uint64,
 		reflect.Float32, reflect.Float64:
 	default:
-		panic(fmt.Errorf("must not be scalar type"))
+		panic("must be simple type")
 	}
 
 	// input is a temp copy, directly use it.
-
 	ret = sliceTmp
-	sliceEface := (*emptyInterface)(unsafe.Pointer(&sliceTmp))
-	sliceHeader_ := (*sliceHeader)(sliceEface.data)
-	need := int(elemType.Size()) * sliceHeader_.Len
-	dst := ac.alloc(need, false)
-	copyBytes(sliceHeader_.Data, dst, need)
-	sliceHeader_.Data = dst
+	header := (*sliceHeader)(data(sliceTmp))
+	size := int(elemType.Size()) * header.Len
+	dst := ac.alloc(size, false)
+	copyBytes(header.Data, dst, size)
+	header.Data = dst
 
 	runtime.KeepAlive(slice)
 	return ret
@@ -449,46 +442,44 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, elem interface{}) {
 		return
 	}
 
-	refSlicePtrTp := reflect.TypeOf(slicePtrTmp)
-	if refSlicePtrTp.Kind() != reflect.Ptr || refSlicePtrTp.Elem().Kind() != reflect.Slice {
-		panic(fmt.Errorf("expect pointer to slice"))
+	slicePtrTp := reflect.TypeOf(slicePtrTmp)
+	if slicePtrTp.Kind() != reflect.Ptr || slicePtrTp.Elem().Kind() != reflect.Slice {
+		panic("expect pointer to slice")
 	}
-	refInputTp := reflect.TypeOf(elem)
-	refElemTp := refSlicePtrTp.Elem().Elem()
-	if refElemTp != refInputTp && elem != nil {
-		panic(fmt.Errorf("elem type not match with slice"))
+	inputElemTp := reflect.TypeOf(elem)
+	sliceElemTp := slicePtrTp.Elem().Elem()
+	if sliceElemTp != inputElemTp && elem != nil {
+		panic("elem type not match with slice")
 	}
 
-	sliceEface := (*emptyInterface)(unsafe.Pointer(&slicePtrTmp))
-	slice_ := (*sliceHeader)(sliceEface.data)
-	elemEface := (*emptyInterface)(unsafe.Pointer(&elem))
-	elemSz := int(refElemTp.Size())
+	header := (*sliceHeader)(data(slicePtrTmp))
+	elemSz := int(sliceElemTp.Size())
 
 	// grow
-	if slice_.Len >= slice_.Cap {
-		pre := *slice_
-		if slice_.Cap >= 16 {
-			slice_.Cap = int(float32(slice_.Cap) * 1.5)
+	if header.Len >= header.Cap {
+		pre := *header
+		if header.Cap >= 16 {
+			header.Cap = int(float32(header.Cap) * 1.5)
 		} else {
-			slice_.Cap *= 2
+			header.Cap *= 2
 		}
-		if slice_.Cap == 0 {
-			slice_.Cap = 1
+		if header.Cap == 0 {
+			header.Cap = 1
 		}
-		slice_.Data = ac.alloc(slice_.Cap*elemSz, false)
-		copyBytes(pre.Data, slice_.Data, pre.Len*elemSz)
-		slice_.Len = pre.Len
+		header.Data = ac.alloc(header.Cap*elemSz, false)
+		copyBytes(pre.Data, header.Data, pre.Len*elemSz)
 	}
 
 	// append
-	if slice_.Len < slice_.Cap {
-		d := unsafe.Pointer(uintptr(slice_.Data) + uintptr(elemSz)*uintptr(slice_.Len))
-		if refElemTp.Kind() == reflect.Ptr {
-			*(*uintptr)(d) = (uintptr)(elemEface.data)
+	if header.Len < header.Cap {
+		elemData := data(elem)
+		dst := add(header.Data, elemSz*header.Len)
+		if sliceElemTp.Kind() == reflect.Ptr {
+			*(*unsafe.Pointer)(dst) = elemData
 		} else {
-			copyBytes(elemEface.data, d, elemSz)
+			copyBytes(elemData, dst, elemSz)
 		}
-		slice_.Len++
+		header.Len++
 	}
 }
 
@@ -501,7 +492,7 @@ func (ac *Allocator) Enum(e interface{}) interface{} {
 	}
 	tp := reflect.TypeOf(temp)
 	r := ac.typedNew(reflect.PtrTo(tp), false)
-	copyBytes((*emptyInterface)(unsafe.Pointer(&temp)).data, (*emptyInterface)(unsafe.Pointer(&r)).data, int(tp.Size()))
+	copyBytes(data(temp), data(r), int(tp.Size()))
 	return r
 }
 
@@ -538,36 +529,30 @@ func (ac *Allocator) debugCheck() {
 	}
 }
 
-func (ac *Allocator) checkRecursively(pe reflect.Value, checked map[interface{}]struct{}) error {
-	defer func() {
-		if err := recover(); err != nil {
-			panic(err)
-		}
-	}()
-
-	if pe.Kind() == reflect.Ptr {
-		if pe.Pointer() != trickyAddress && !pe.IsNil() {
-			if !ac.internalPointer(pe.Pointer()) {
-				return fmt.Errorf("unexpected external pointer: %+v", pe)
+func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}]struct{}) error {
+	if val.Kind() == reflect.Ptr {
+		if val.Pointer() != trickyAddress && !val.IsNil() {
+			if !ac.internalPointer(val.Pointer()) {
+				return fmt.Errorf("unexpected external pointer: %+v", val)
 			}
-			if pe.Elem().Type().Kind() == reflect.Struct {
-				if err := ac.checkRecursively(pe.Elem(), checked); err != nil {
+			if val.Elem().Type().Kind() == reflect.Struct {
+				if err := ac.checkRecursively(val.Elem(), checked); err != nil {
 					return err
 				}
-				checked[pe.Interface()] = struct{}{}
+				checked[val.Interface()] = struct{}{}
 			}
 		}
 		return nil
 	}
 
-	tp := pe.Type()
+	tp := val.Type()
 	fieldName := func(i int) string {
 		return fmt.Sprintf("%v.%v", tp.Name(), tp.Field(i).Name)
 	}
 
-	if pe.Kind() == reflect.Struct {
-		for i := 0; i < pe.NumField(); i++ {
-			f := pe.Field(i)
+	if val.Kind() == reflect.Struct {
+		for i := 0; i < val.NumField(); i++ {
+			f := val.Field(i)
 
 			switch f.Kind() {
 			case reflect.Ptr:
