@@ -3,8 +3,11 @@ package linear_ac
 import (
 	"fmt"
 	"math"
+	"math/rand"
 	"runtime"
+	"sync"
 	"testing"
+	"time"
 )
 
 type EnumA int32
@@ -29,8 +32,15 @@ type PbData struct {
 	InUse *PbItem
 }
 
+func Test_GoRoutineId(t *testing.T) {
+	id := goRoutineId()
+	if id != goRoutineIdSlow() {
+		t.Fail()
+	}
+}
+
 func Test_LinearAlloc(t *testing.T) {
-	ac := Get()
+	ac := BindAc()
 	var d *PbData
 	ac.New(&d)
 	d.Age = ac.Int(11)
@@ -72,7 +82,7 @@ func Test_LinearAlloc(t *testing.T) {
 
 func Test_CheckArray(t *testing.T) {
 	DbgMode = true
-	ac := Get()
+	ac := BindAc()
 	defer func() {
 		if err := recover(); err == nil {
 			t.Errorf("faile to check")
@@ -94,7 +104,7 @@ func Test_CheckArray(t *testing.T) {
 
 func Test_CheckInternalSlice(t *testing.T) {
 	DbgMode = true
-	ac := Get()
+	ac := BindAc()
 
 	type D struct {
 		v []int
@@ -107,7 +117,7 @@ func Test_CheckInternalSlice(t *testing.T) {
 
 func Test_CheckExternalSlice(t *testing.T) {
 	DbgMode = true
-	ac := Get()
+	ac := BindAc()
 	defer func() {
 		if err := recover(); err == nil {
 			t.Errorf("faile to check")
@@ -136,7 +146,7 @@ func TestUseAfterFree_Pointer(t *testing.T) {
 			t.Errorf("failed to check")
 		}
 	}()
-	ac := Get()
+	ac := BindAc()
 	var d *PbData
 	ac.New(&d)
 	d.Age = ac.Int(11)
@@ -155,7 +165,7 @@ func TestUseAfterFree_Slice(t *testing.T) {
 		}
 	}()
 
-	ac := Get()
+	ac := BindAc()
 	var d *PbData
 	ac.New(&d)
 	ac.NewSlice(&d.Items, 1, 1)
@@ -172,7 +182,7 @@ func Test_WorkWithGc(t *testing.T) {
 		v [10]*int
 	}
 
-	ac := Get()
+	ac := BindAc()
 
 	var d *D
 	ac.New(&d)
@@ -193,7 +203,7 @@ func Test_WorkWithGc(t *testing.T) {
 }
 
 func Test_String(t *testing.T) {
-	ac := Get()
+	ac := BindAc()
 
 	type D struct {
 		s [5]*string
@@ -213,7 +223,7 @@ func Test_String(t *testing.T) {
 }
 
 func TestLinearAllocator_NewMap(t *testing.T) {
-	ac := Get()
+	ac := BindAc()
 
 	type D struct {
 		m map[int]*int
@@ -237,7 +247,7 @@ func TestLinearAllocator_NewMap(t *testing.T) {
 
 func TestLinearAllocator_ExternalMap(t *testing.T) {
 	DbgMode = true
-	ac := Get()
+	ac := BindAc()
 	defer func() {
 		if err := recover(); err == nil {
 			t.Errorf("faile to check")
@@ -255,7 +265,7 @@ func TestLinearAllocator_ExternalMap(t *testing.T) {
 
 func TestLinearAllocator_NewSlice(t *testing.T) {
 	DbgMode = true
-	ac := Get()
+	ac := BindAc()
 	s := make([]*int, 0)
 	ac.SliceAppend(&s, ac.Int(2))
 	if len(s) != 1 && *s[0] != 2 {
@@ -314,7 +324,7 @@ func TestLinearAllocator_NewSlice(t *testing.T) {
 }
 
 func TestLinearAllocator_New2(b *testing.T) {
-	ac := Get()
+	ac := BindAc()
 	for i := 0; i < 3; i++ {
 		d := ac.New2(&PbItem{
 			Id:    ac.Int(1 + i),
@@ -340,7 +350,7 @@ func TestLinearAllocator_New2(b *testing.T) {
 }
 
 func TestAllocator_Enum(t *testing.T) {
-	ac := Get()
+	ac := BindAc()
 	e := EnumVal2
 	v := ac.Enum(e).(*EnumA)
 	if *v != e {
@@ -350,7 +360,7 @@ func TestAllocator_Enum(t *testing.T) {
 }
 
 func TestAllocator_CheckExternalEnum(t *testing.T) {
-	ac := Get()
+	ac := BindAc()
 	defer func() {
 		if err := recover(); err == nil {
 			t.Errorf("failed to check")
@@ -399,13 +409,37 @@ func TestBuildInAllocator_All(t *testing.T) {
 	ac.Release()
 }
 
+func TestBindAc(t *testing.T) {
+	useAc := func() *Allocator {
+		return Get()
+	}
+
+	wg := sync.WaitGroup{}
+	for i := 0; i < 1000; i++ {
+		go func() {
+			wg.Add(1)
+
+			ac := BindAc()
+			defer ac.Release()
+
+			time.Sleep(time.Duration(rand.Float32()*1000) * time.Millisecond)
+
+			if useAc() != ac {
+				t.Fail()
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+}
+
 func CallLinearAllocBench(gcRate int, t *testing.B) {
 	t.ReportAllocs()
 	DbgMode = false
 	preChunkSz := ChunkSize
 	// make gc happy
 	ChunkSize = 1024 * 64
-	ac := Get()
+	ac := BindAc()
 	defer func() {
 		ac.Release()
 		DbgMode = true

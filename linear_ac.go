@@ -13,7 +13,11 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"runtime"
+	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -56,6 +60,49 @@ var (
 	strPtrType  = reflect.TypeOf((*string)(nil))
 )
 
+// GoroutineId
+
+// https://notes.volution.ro/v1/2019/08/notes/23e3644e/
+
+var goRoutineIdOffset uint64 = 0
+
+func goRoutinePtr() uint64
+
+func goRoutineId() uint64 {
+	data := (*[32]uint64)(unsafe.Pointer(uintptr(goRoutinePtr())))
+	if offset := atomic.LoadUint64(&goRoutineIdOffset); offset != 0 {
+		return data[int(offset)]
+	}
+	id := goRoutineIdSlow()
+	matchedCount := 0
+	matchedOffset := 0
+	for idx, v := range data[:] {
+		if v == id {
+			matchedOffset = idx
+			matchedCount++
+			if matchedCount >= 2 {
+				break
+			}
+		}
+	}
+	if matchedCount == 1 {
+		atomic.StoreUint64(&goRoutineIdOffset, uint64(matchedOffset))
+	}
+	return id
+}
+
+func goRoutineIdSlow() uint64 {
+	var buf [64]byte
+	n := runtime.Stack(buf[:], false)
+	stk := strings.TrimPrefix(string(buf[:n]), "goroutine ")
+	idField := strings.Fields(stk)[0]
+	if id, err := strconv.Atoi(idField); err != nil {
+		panic(fmt.Errorf("invalid goroutine id: %v, err: %v", idField, err))
+	} else {
+		return uint64(id)
+	}
+}
+
 // Pool
 
 type Pool struct {
@@ -79,16 +126,6 @@ func (p *Pool) Put(v interface{}) {
 	p.Lock()
 	defer p.Unlock()
 	p.pool = append(p.pool, v)
-
-	if DbgMode {
-		// make pointers live longer to reduce the memory overwriting chances by
-		// pushing chunk to the front, useful to diagnosis use-after-free bugs.
-		s := p.pool
-		for i := len(s) - 1; i >= 1; i-- {
-			s[i-1] = s[i]
-		}
-		s[0] = v
-	}
 }
 
 // Chunk
@@ -97,16 +134,15 @@ type chunk []byte
 
 var chunkPool = Pool{
 	New: func() interface{} {
-		sz := ChunkSize
-		if DbgMode {
-			// Use more chunks to reduce memory overwriting chance.
-			// useful to diagnosis the use-after-free bugs.
-			sz /= 8
-		}
-		ck := make(chunk, 0, sz)
+		ck := make(chunk, 0, ChunkSize)
 		return &ck
 	},
 }
+
+// Objects in sync.Pool will be recycled on demand by the system (usually after two full-gc).
+// we can put chunks here to make pointers live longer,
+// useful to diagnosis use-after-free bugs.
+var diagnosisChunkPool = sync.Pool{}
 
 // Allocator
 
@@ -123,25 +159,43 @@ var BuildInAc = &Allocator{disabled: true}
 
 var acPool = Pool{
 	New: func() interface{} {
-		return newLinearAc()
+		return NewLinearAc()
 	},
 }
 
-func newLinearAc() *Allocator {
+func NewLinearAc() *Allocator {
 	ac := &Allocator{
 		disabled: DbgDisableLinearAc,
 	}
 	return ac
 }
 
-func Get() *Allocator {
+// Attach allocator to coroutine
+
+var acMap = sync.Map{}
+
+func BindAc() *Allocator {
+	if Get() != BuildInAc {
+		panic("rebind allocator")
+	}
 	ac := acPool.Get().(*Allocator)
+	acMap.Store(goRoutineId(), ac)
 	return ac
+}
+
+func Get() *Allocator {
+	if val, ok := acMap.Load(goRoutineId()); ok {
+		return val.(*Allocator)
+	}
+	return BuildInAc
 }
 
 func (ac *Allocator) Release() {
 	if ac == BuildInAc {
 		return
+	}
+	if Get() == ac {
+		acMap.Delete(goRoutineId())
 	}
 	ac.Reset()
 	acPool.Put(ac)
@@ -159,7 +213,11 @@ func (ac *Allocator) Reset() {
 
 	for _, ck := range ac.chunks {
 		*ck = (*ck)[:0]
-		chunkPool.Put(ck)
+		if DbgMode {
+			diagnosisChunkPool.Put(ck)
+		} else {
+			chunkPool.Put(ck)
+		}
 	}
 	ac.chunks = ac.chunks[:0]
 	ac.curChunk = 0
