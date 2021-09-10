@@ -403,6 +403,43 @@ func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap_ int) {
 	slice_.Cap = cap_
 }
 
+// Useful to create simple slice (simple type as element)
+func (ac *Allocator) CopySlice(slice interface{}) (ret interface{}) {
+	sliceTmp := noEscape(slice)
+	if ac.disabled {
+		return sliceTmp
+	}
+
+	sliceType := reflect.TypeOf(sliceTmp)
+	elemType := sliceType.Elem()
+	if sliceType.Kind() != reflect.Slice {
+		panic(fmt.Errorf("need a slice"))
+	}
+	switch elemType.Kind() {
+	case reflect.Int, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+	default:
+		panic(fmt.Errorf("must not be scalar type"))
+	}
+
+	// input is a temp copy, directly use it.
+
+	sliceEface := (*emptyInterface)(unsafe.Pointer(&sliceTmp))
+	sliceHeader_ := (*sliceHeader)(sliceEface.data)
+
+	retEface := (*emptyInterface)(unsafe.Pointer(&ret))
+	*retEface = *sliceEface
+
+	need := int(elemType.Size()) * sliceHeader_.Len
+	dst := ac.alloc(need, false)
+	copyBytes(sliceHeader_.Data, dst, need)
+	sliceHeader_.Data = dst
+
+	runtime.KeepAlive(slice)
+	return ret
+}
+
 func (ac *Allocator) SliceAppend(slicePtr interface{}, elem interface{}) {
 	slicePtrTmp := noEscape(slicePtr)
 
@@ -503,6 +540,12 @@ func (ac *Allocator) debugCheck() {
 }
 
 func (ac *Allocator) checkRecursively(pe reflect.Value, checked map[interface{}]struct{}) error {
+	defer func() {
+		if err := recover(); err != nil {
+			panic(err)
+		}
+	}()
+
 	if pe.Kind() == reflect.Ptr {
 		if pe.Pointer() != trickyAddress && !pe.IsNil() {
 			if !ac.internalPointer(pe.Pointer()) {

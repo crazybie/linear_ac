@@ -180,6 +180,22 @@ func TestLinearAllocator_NewSlice(t *testing.T) {
 		}
 	}
 
+	{
+		s := []int{2, 3, 4}
+		r := ac.CopySlice(s).([]int)
+		s[0] = 1
+		s[1] = 1
+		s[2] = 1
+		if len(r) != len(s) {
+			t.Errorf("copy")
+		}
+		for i := range s {
+			if s[i] == r[i] {
+				t.Errorf("copy elem")
+			}
+		}
+	}
+
 	ac.Release()
 }
 
