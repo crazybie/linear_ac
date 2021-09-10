@@ -170,14 +170,11 @@ func NewLinearAc() *Allocator {
 	return ac
 }
 
-// Attach allocator to goroutine
+// Bind allocator to goroutine
 
 var acMap = sync.Map{}
 
-func BindAc() *Allocator {
-	if Get() != BuildInAc {
-		panic("duplicated binding")
-	}
+func BindNew() *Allocator {
 	ac := acPool.Get().(*Allocator)
 	acMap.Store(goRoutineId(), ac)
 	return ac
@@ -190,18 +187,22 @@ func Get() *Allocator {
 	return BuildInAc
 }
 
+func (ac *Allocator) Unbind() {
+	if Get() == ac {
+		acMap.Delete(goRoutineId())
+	}
+}
+
 func (ac *Allocator) Release() {
 	if ac == BuildInAc {
 		return
 	}
-	ac.Reset()
-	if Get() == ac {
-		acMap.Delete(goRoutineId())
-	}
+	ac.Unbind()
+	ac.reset()
 	acPool.Put(ac)
 }
 
-func (ac *Allocator) Reset() {
+func (ac *Allocator) reset() {
 	if ac.disabled {
 		return
 	}
@@ -254,10 +255,10 @@ func (ac *Allocator) New(ptrToPtr interface{}) {
 	*(*uintptr)((*emptyInterface)(unsafe.Pointer(&tmp)).data) = (uintptr)((*emptyInterface)(unsafe.Pointer(&v)).data)
 }
 
-// New2 is useful for code migration.
+// NewCopy is useful for code migration.
 // native mode is slower than new() due to the additional memory move from stack to heap,
 // this is on purpose to avoid heap alloc in linear mode.
-func (ac *Allocator) New2(ptr interface{}) (ret interface{}) {
+func (ac *Allocator) NewCopy(ptr interface{}) (ret interface{}) {
 	ptrTemp := noEscape(ptr)
 	ptrType := reflect.TypeOf(ptrTemp)
 	tp := ptrType.Elem()
@@ -468,7 +469,15 @@ func (ac *Allocator) Enum(e interface{}) interface{} {
 	return r
 }
 
+// Use 1 instead of nil or MaxUint64 to
+// 1. make non-nil check pass.
+// 2. generate a recoverable panic.
+const trickyAddress = uintptr(1)
+
 func (ac *Allocator) internalPointer(addr uintptr) bool {
+	if addr == 0 || addr == trickyAddress {
+		return true
+	}
 	for _, c := range ac.chunks {
 		h := (*sliceHeader)(unsafe.Pointer(c))
 		if addr >= uintptr(h.Data) && addr < uintptr(h.Data)+uintptr(h.Cap) {
@@ -481,7 +490,9 @@ func (ac *Allocator) internalPointer(addr uintptr) bool {
 // NOTE: all memories must be referenced by structs.
 func (ac *Allocator) debugCheck() {
 	checked := map[interface{}]struct{}{}
-	for _, ptr := range ac.scanObjs {
+	// reverse order to bypass obfuscated pointers
+	for i := len(ac.scanObjs) - 1; i >= 0; i-- {
+		ptr := ac.scanObjs[i]
 		if _, ok := checked[ptr]; ok {
 			continue
 		}
@@ -493,7 +504,7 @@ func (ac *Allocator) debugCheck() {
 
 func (ac *Allocator) checkRecursively(pe reflect.Value, checked map[interface{}]struct{}) error {
 	if pe.Kind() == reflect.Ptr {
-		if !pe.IsNil() {
+		if pe.Pointer() != trickyAddress && !pe.IsNil() {
 			if !ac.internalPointer(pe.Pointer()) {
 				return fmt.Errorf("unexpected external pointer: %+v", pe)
 			}
@@ -507,8 +518,9 @@ func (ac *Allocator) checkRecursively(pe reflect.Value, checked map[interface{}]
 		return nil
 	}
 
+	tp := pe.Type()
 	fieldName := func(i int) string {
-		return fmt.Sprintf("%v.%v", pe.Type().Name(), pe.Type().Field(i).Name)
+		return fmt.Sprintf("%v.%v", tp.Name(), tp.Field(i).Name)
 	}
 
 	if pe.Kind() == reflect.Struct {
@@ -520,16 +532,13 @@ func (ac *Allocator) checkRecursively(pe reflect.Value, checked map[interface{}]
 				if err := ac.checkRecursively(f, checked); err != nil {
 					return fmt.Errorf("%v: %v", fieldName(i), err)
 				}
-				// Use 1 instead of nil or MaxUint64:
-				// 1. make non-nil check pass.
-				// 2. generate a recoverable panic.
-				*(*uintptr)(unsafe.Pointer(f.UnsafeAddr())) = 1
+				*(*uintptr)(unsafe.Pointer(f.UnsafeAddr())) = trickyAddress
 
 			case reflect.Slice:
 				h := (*sliceHeader)(unsafe.Pointer(f.UnsafeAddr()))
-				if f.Len() > 0 {
+				if f.Len() > 0 && h.Data != nil {
 					if !ac.internalPointer((uintptr)(h.Data)) {
-						return fmt.Errorf("%s: unexpected external pointer: %s", fieldName(i), f.String())
+						return fmt.Errorf("%s: unexpected external slice: %s", fieldName(i), f.String())
 					}
 					for j := 0; j < f.Len(); j++ {
 						if err := ac.checkRecursively(f.Index(j), checked); err != nil {
@@ -551,7 +560,7 @@ func (ac *Allocator) checkRecursively(pe reflect.Value, checked map[interface{}]
 			case reflect.Map:
 				m := *(*unsafe.Pointer)(unsafe.Pointer(f.UnsafeAddr()))
 				if _, ok := ac.maps[m]; !ok {
-					return fmt.Errorf("%v: unexpected external pointer: %+v", fieldName(i), f)
+					return fmt.Errorf("%v: unexpected external map: %+v", fieldName(i), f)
 				}
 				for iter := f.MapRange(); iter.Next(); {
 					if err := ac.checkRecursively(iter.Value(), checked); err != nil {

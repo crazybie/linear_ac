@@ -40,7 +40,7 @@ func Test_GoRoutineId(t *testing.T) {
 }
 
 func Test_LinearAlloc(t *testing.T) {
-	ac := BindAc()
+	ac := BindNew()
 	var d *PbData
 	ac.New(&d)
 	d.Age = ac.Int(11)
@@ -76,12 +76,12 @@ func Test_LinearAlloc(t *testing.T) {
 			t.Errorf("item.class")
 		}
 	}
-	ac.Reset()
+	ac.reset()
 	ac.Release()
 }
 
 func Test_String(t *testing.T) {
-	ac := BindAc()
+	ac := BindNew()
 
 	type D struct {
 		s [5]*string
@@ -101,7 +101,7 @@ func Test_String(t *testing.T) {
 }
 
 func TestLinearAllocator_NewMap(t *testing.T) {
-	ac := BindAc()
+	ac := BindNew()
 
 	type D struct {
 		m map[int]*int
@@ -125,7 +125,7 @@ func TestLinearAllocator_NewMap(t *testing.T) {
 
 func TestLinearAllocator_NewSlice(t *testing.T) {
 	DbgMode = true
-	ac := BindAc()
+	ac := BindNew()
 	s := make([]*int, 0)
 	ac.SliceAppend(&s, ac.Int(2))
 	if len(s) != 1 && *s[0] != 2 {
@@ -184,9 +184,9 @@ func TestLinearAllocator_NewSlice(t *testing.T) {
 }
 
 func TestLinearAllocator_New2(b *testing.T) {
-	ac := BindAc()
+	ac := BindNew()
 	for i := 0; i < 3; i++ {
-		d := ac.New2(&PbItem{
+		d := ac.NewCopy(&PbItem{
 			Id:    ac.Int(1 + i),
 			Class: ac.Int(2 + i),
 			Price: ac.Int(3 + i),
@@ -210,7 +210,7 @@ func TestLinearAllocator_New2(b *testing.T) {
 }
 
 func TestAllocator_Enum(t *testing.T) {
-	ac := BindAc()
+	ac := BindNew()
 	e := EnumVal2
 	v := ac.Enum(e).(*EnumA)
 	if *v != e {
@@ -228,7 +228,7 @@ func TestBuildInAllocator_All(t *testing.T) {
 		t.Fail()
 	}
 	id2 := 22
-	item = ac.New2(&PbItem{Id: &id2}).(*PbItem)
+	item = ac.NewCopy(&PbItem{Id: &id2}).(*PbItem)
 	if *item.Id != 22 {
 		t.Fail()
 	}
@@ -265,7 +265,7 @@ func TestBindAc(t *testing.T) {
 		go func() {
 			wg.Add(1)
 
-			ac := BindAc()
+			ac := BindNew()
 			defer ac.Release()
 
 			time.Sleep(time.Duration(rand.Float32()*1000) * time.Millisecond)
@@ -285,7 +285,7 @@ func CallLinearAllocBench(gcRate int, t *testing.B) {
 	preChunkSz := ChunkSize
 	// make gc happy
 	ChunkSize = 1024 * 64
-	ac := BindAc()
+	ac := BindNew()
 	defer func() {
 		ac.Release()
 		DbgMode = true
@@ -312,7 +312,7 @@ func CallLinearAllocBench(gcRate int, t *testing.B) {
 				item.Name = ac.String("name")
 				item.EnumVal = ac.Enum(EnumVal2).(*EnumA)
 			} else {
-				item = ac.New2(&PbItem{
+				item = ac.NewCopy(&PbItem{
 					Id:      ac.Int(2 + j),
 					Price:   ac.Int(100 + j),
 					Class:   ac.Int(3 + j),
