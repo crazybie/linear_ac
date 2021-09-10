@@ -170,13 +170,13 @@ func NewLinearAc() *Allocator {
 	return ac
 }
 
-// Attach allocator to coroutine
+// Attach allocator to goroutine
 
 var acMap = sync.Map{}
 
 func BindAc() *Allocator {
 	if Get() != BuildInAc {
-		panic("rebind allocator")
+		panic("duplicated binding")
 	}
 	ac := acPool.Get().(*Allocator)
 	acMap.Store(goRoutineId(), ac)
@@ -194,10 +194,10 @@ func (ac *Allocator) Release() {
 	if ac == BuildInAc {
 		return
 	}
+	ac.Reset()
 	if Get() == ac {
 		acMap.Delete(goRoutineId())
 	}
-	ac.Reset()
 	acPool.Put(ac)
 }
 
@@ -207,7 +207,7 @@ func (ac *Allocator) Reset() {
 	}
 
 	if DbgMode {
-		ac.checkPointers()
+		ac.debugCheck()
 		ac.scanObjs = ac.scanObjs[:0]
 	}
 
@@ -218,6 +218,11 @@ func (ac *Allocator) Reset() {
 		} else {
 			chunkPool.Put(ck)
 		}
+	}
+	// clear all ref
+	ac.chunks = ac.chunks[:cap(ac.chunks)]
+	for i := 0; i < cap(ac.chunks); i++ {
+		ac.chunks[i] = nil
 	}
 	ac.chunks = ac.chunks[:0]
 	ac.curChunk = 0
@@ -473,42 +478,52 @@ func (ac *Allocator) internalPointer(addr uintptr) bool {
 	return false
 }
 
-// checkPointers only support struct as root.
-func (ac *Allocator) checkPointers() {
+// NOTE: all memories must be referenced by structs.
+func (ac *Allocator) debugCheck() {
+	checked := map[interface{}]struct{}{}
 	for _, ptr := range ac.scanObjs {
-		if err := ac.checkRecursively(reflect.ValueOf(ptr)); err != nil {
+		if _, ok := checked[ptr]; ok {
+			continue
+		}
+		if err := ac.checkRecursively(reflect.ValueOf(ptr), checked); err != nil {
 			panic(err)
 		}
 	}
 }
 
-func (ac *Allocator) checkRecursively(pe reflect.Value) error {
+func (ac *Allocator) checkRecursively(pe reflect.Value, checked map[interface{}]struct{}) error {
 	if pe.Kind() == reflect.Ptr {
 		if !pe.IsNil() {
 			if !ac.internalPointer(pe.Pointer()) {
 				return fmt.Errorf("unexpected external pointer: %+v", pe)
 			}
 			if pe.Elem().Type().Kind() == reflect.Struct {
-				return ac.checkRecursively(pe.Elem())
+				if err := ac.checkRecursively(pe.Elem(), checked); err != nil {
+					return err
+				}
+				checked[pe.Interface()] = struct{}{}
 			}
-			// Use 1 instead of nil or MaxUint64:
-			// 1. make non-nil check pass.
-			// 2. generate a recoverable panic.
-			*(*uintptr)(unsafe.Pointer(pe.UnsafeAddr())) = 1
 		}
 		return nil
 	}
+
 	fieldName := func(i int) string {
 		return fmt.Sprintf("%v.%v", pe.Type().Name(), pe.Type().Field(i).Name)
 	}
+
 	if pe.Kind() == reflect.Struct {
 		for i := 0; i < pe.NumField(); i++ {
 			f := pe.Field(i)
+
 			switch f.Kind() {
 			case reflect.Ptr:
-				if err := ac.checkRecursively(f); err != nil {
+				if err := ac.checkRecursively(f, checked); err != nil {
 					return fmt.Errorf("%v: %v", fieldName(i), err)
 				}
+				// Use 1 instead of nil or MaxUint64:
+				// 1. make non-nil check pass.
+				// 2. generate a recoverable panic.
+				*(*uintptr)(unsafe.Pointer(f.UnsafeAddr())) = 1
 
 			case reflect.Slice:
 				h := (*sliceHeader)(unsafe.Pointer(f.UnsafeAddr()))
@@ -517,7 +532,7 @@ func (ac *Allocator) checkRecursively(pe reflect.Value) error {
 						return fmt.Errorf("%s: unexpected external pointer: %s", fieldName(i), f.String())
 					}
 					for j := 0; j < f.Len(); j++ {
-						if err := ac.checkRecursively(f.Index(j)); err != nil {
+						if err := ac.checkRecursively(f.Index(j), checked); err != nil {
 							return fmt.Errorf("%v: %v", fieldName(i), err)
 						}
 					}
@@ -528,7 +543,7 @@ func (ac *Allocator) checkRecursively(pe reflect.Value) error {
 
 			case reflect.Array:
 				for j := 0; j < f.Len(); j++ {
-					if err := ac.checkRecursively(f.Index(j)); err != nil {
+					if err := ac.checkRecursively(f.Index(j), checked); err != nil {
 						return fmt.Errorf("%v: %v", fieldName(i), err)
 					}
 				}
@@ -539,7 +554,7 @@ func (ac *Allocator) checkRecursively(pe reflect.Value) error {
 					return fmt.Errorf("%v: unexpected external pointer: %+v", fieldName(i), f)
 				}
 				for iter := f.MapRange(); iter.Next(); {
-					if err := ac.checkRecursively(iter.Value()); err != nil {
+					if err := ac.checkRecursively(iter.Value(), checked); err != nil {
 						return fmt.Errorf("%v: %v", fieldName(i), err)
 					}
 				}
