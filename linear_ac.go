@@ -6,6 +6,8 @@
 //
 // Improve the memory allocation and garbage collection performance.
 //
+// https://github.com/crazybie/linear_ac
+//
 
 package linear_ac
 
@@ -425,12 +427,9 @@ func (ac *Allocator) CopySlice(slice interface{}) (ret interface{}) {
 
 	// input is a temp copy, directly use it.
 
+	ret = sliceTmp
 	sliceEface := (*emptyInterface)(unsafe.Pointer(&sliceTmp))
 	sliceHeader_ := (*sliceHeader)(sliceEface.data)
-
-	retEface := (*emptyInterface)(unsafe.Pointer(&ret))
-	*retEface = *sliceEface
-
 	need := int(elemType.Size()) * sliceHeader_.Len
 	dst := ac.alloc(need, false)
 	copyBytes(sliceHeader_.Data, dst, need)
