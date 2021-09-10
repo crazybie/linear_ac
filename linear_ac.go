@@ -156,8 +156,8 @@ type Allocator struct {
 	maps     map[unsafe.Pointer]struct{}
 }
 
-// BuildInAc switches to native allocator.
-var BuildInAc = &Allocator{disabled: true}
+// buildInAc switches to native allocator.
+var buildInAc = &Allocator{disabled: true}
 
 var acPool = Pool{
 	New: func() interface{} {
@@ -186,7 +186,7 @@ func Get() *Allocator {
 	if val, ok := acMap.Load(goRoutineId()); ok {
 		return val.(*Allocator)
 	}
-	return BuildInAc
+	return buildInAc
 }
 
 func (ac *Allocator) Unbind() {
@@ -196,7 +196,7 @@ func (ac *Allocator) Unbind() {
 }
 
 func (ac *Allocator) Release() {
-	if ac == BuildInAc {
+	if ac == buildInAc {
 		return
 	}
 	ac.Unbind()

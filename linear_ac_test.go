@@ -236,7 +236,7 @@ func TestAllocator_Enum(t *testing.T) {
 }
 
 func TestBuildInAllocator_All(t *testing.T) {
-	ac := BuildInAc
+	ac := buildInAc
 	var item *PbItem
 	ac.New(&item)
 	item.Id = ac.Int(11)
