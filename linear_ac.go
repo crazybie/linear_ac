@@ -109,8 +109,19 @@ func add(p unsafe.Pointer, offset int) unsafe.Pointer {
 	return unsafe.Pointer(uintptr(p) + uintptr(offset))
 }
 
+//go:noinline
+func forceStackSplit(i int) int {
+	if i > 0 {
+		return forceStackSplit(i - 1)
+	}
+	return i
+}
+
+//go:noinline
+//go:nosplit
 func noEscape(p interface{}) (ret interface{}) {
 	r := *(*[2]uintptr)(unsafe.Pointer(&p))
+	//forceStackSplit(1000)
 	*(*[2]uintptr)(unsafe.Pointer(&ret)) = r
 	return
 }
