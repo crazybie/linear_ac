@@ -5,17 +5,17 @@
 Speed up the memory allocation and improve the GC performance, especially for dynamic-memory-heavy applications.
 
 ## Potential UseCases
-1. Large amount of memory never needs to be released. (global configs, readonly assets like navmesh)
+1. A large amount of memory never needs to be released. (global configs, read-only assets like navmesh)
 2. Massive temporary objects with deterministic lifetime. (protobuf objects send to network)
 
 ## Advantages over pool
 Linear allocator:
 
 1. Can greatly reduce the object scanning pressure of GC. Linear allocator is just a few byte arrays internally, but pool is normal container always need to be scanned fully.
-2. More general. Linear allocator can allocate various type of objects.
+2. More general. Linear allocator can allocate various types of objects.
 3. Much simpler and faster on reclaiming memories. No need to manually release every object back but just reset the allocation cursor.
 4. Much cheaper. Linear allocators reuse memory chunks among each other via chunk pool. 
-5. Memory efficient. Memories are more compact, cpu cache friendly. 
+5. Memory efficient. Memories are more compact, CPU cache-friendly. 
 
 ## Limitations
 1. Don't store the pointers of build-in allocated objects into linear allocated objects. (There's a debug mode for checking external pointers)
@@ -43,10 +43,8 @@ type PbData struct {
 
 func main() {
 	
-	ac := Get()
-	defer func(){
-		ac.Release()
-	}()
+	ac := linear_ac.Get()
+	defer ac.Release()
 	
 	var d *PbData
 	ac.New(&d)
@@ -64,8 +62,6 @@ func main() {
 
 		ac.SliceAppend(&d.Items, item)
 	}
-
-	ac.Reset()
 }
 ```
 
@@ -92,3 +88,4 @@ Benchmark_buildInAllocGc3
 Benchmark_buildInAllocGc3-8        77707             59164 ns/op            2488 B/op        148 allocs/op
 
 ```
+
