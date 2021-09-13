@@ -258,7 +258,7 @@ func (ac *Allocator) reset() {
 	}
 
 	if DbgMode {
-		ac.debugCheck()
+		ac.debugCheck(true)
 		ac.scanObjs = ac.scanObjs[:0]
 	}
 
@@ -526,7 +526,7 @@ func (ac *Allocator) internalPointer(addr uintptr) bool {
 }
 
 // NOTE: all memories must be referenced by structs.
-func (ac *Allocator) debugCheck() {
+func (ac *Allocator) debugCheck(invalidatePointers bool) {
 	checked := map[interface{}]struct{}{}
 	// reverse order to bypass obfuscated pointers
 	for i := len(ac.scanObjs) - 1; i >= 0; i-- {
@@ -534,20 +534,26 @@ func (ac *Allocator) debugCheck() {
 		if _, ok := checked[ptr]; ok {
 			continue
 		}
-		if err := ac.checkRecursively(reflect.ValueOf(ptr), checked); err != nil {
+		if err := ac.checkRecursively(reflect.ValueOf(ptr), checked, invalidatePointers); err != nil {
 			panic(err)
 		}
 	}
 }
 
-func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}]struct{}) error {
+// CheckExternalPointers is useful for if you want to check external pointers but don't want to invalidate pointers.
+// e.g. using ac as config memory allocator globally.
+func (ac *Allocator) CheckExternalPointers() {
+	ac.debugCheck(false)
+}
+
+func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}]struct{}, invalidatePointers bool) error {
 	if val.Kind() == reflect.Ptr {
 		if val.Pointer() != trickyAddress && !val.IsNil() {
 			if !ac.internalPointer(val.Pointer()) {
 				return fmt.Errorf("unexpected external pointer: %+v", val)
 			}
 			if val.Elem().Type().Kind() == reflect.Struct {
-				if err := ac.checkRecursively(val.Elem(), checked); err != nil {
+				if err := ac.checkRecursively(val.Elem(), checked, invalidatePointers); err != nil {
 					return err
 				}
 				checked[val.Interface()] = struct{}{}
@@ -567,10 +573,12 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 
 			switch f.Kind() {
 			case reflect.Ptr:
-				if err := ac.checkRecursively(f, checked); err != nil {
+				if err := ac.checkRecursively(f, checked, invalidatePointers); err != nil {
 					return fmt.Errorf("%v: %v", fieldName(i), err)
 				}
-				*(*uintptr)(unsafe.Pointer(f.UnsafeAddr())) = trickyAddress
+				if invalidatePointers {
+					*(*uintptr)(unsafe.Pointer(f.UnsafeAddr())) = trickyAddress
+				}
 
 			case reflect.Slice:
 				h := (*sliceHeader)(unsafe.Pointer(f.UnsafeAddr()))
@@ -579,18 +587,20 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 						return fmt.Errorf("%s: unexpected external slice: %s", fieldName(i), f.String())
 					}
 					for j := 0; j < f.Len(); j++ {
-						if err := ac.checkRecursively(f.Index(j), checked); err != nil {
+						if err := ac.checkRecursively(f.Index(j), checked, invalidatePointers); err != nil {
 							return fmt.Errorf("%v: %v", fieldName(i), err)
 						}
 					}
 				}
-				h.Data = nil
-				h.Len = math.MaxInt32
-				h.Cap = math.MaxInt32
+				if invalidatePointers {
+					h.Data = nil
+					h.Len = math.MaxInt32
+					h.Cap = math.MaxInt32
+				}
 
 			case reflect.Array:
 				for j := 0; j < f.Len(); j++ {
-					if err := ac.checkRecursively(f.Index(j), checked); err != nil {
+					if err := ac.checkRecursively(f.Index(j), checked, invalidatePointers); err != nil {
 						return fmt.Errorf("%v: %v", fieldName(i), err)
 					}
 				}
@@ -601,7 +611,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 					return fmt.Errorf("%v: unexpected external map: %+v", fieldName(i), f)
 				}
 				for iter := f.MapRange(); iter.Next(); {
-					if err := ac.checkRecursively(iter.Value(), checked); err != nil {
+					if err := ac.checkRecursively(iter.Value(), checked, invalidatePointers); err != nil {
 						return fmt.Errorf("%v: %v", fieldName(i), err)
 					}
 				}
