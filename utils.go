@@ -157,3 +157,26 @@ func (p *syncPool) put(v interface{}) {
 	defer p.Unlock()
 	p.pool = append(p.pool, v)
 }
+
+func (p *syncPool) putMany(v interface{}) {
+	r := reflect.ValueOf(v)
+	p.Lock()
+	defer p.Unlock()
+	for i := 0; i < r.Len(); i++ {
+		p.pool = append(p.pool, r.Index(i).Interface())
+	}
+}
+
+func (p *syncPool) clear() {
+	p.Lock()
+	defer p.Unlock()
+	p.pool = nil
+}
+
+func (p *syncPool) reserve(cnt int) {
+	p.Lock()
+	defer p.Unlock()
+	for i := 0; i < cnt; i++ {
+		p.pool = append(p.pool, p.New())
+	}
+}
