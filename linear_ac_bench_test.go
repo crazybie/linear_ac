@@ -13,7 +13,7 @@ var (
 	totalTasks        = 100000
 	totalGoroutines   = 500
 	busyGoroutineId   = 1
-	busyGoroutineLoop = 100
+	busyGoroutineLoop = 1000
 )
 
 var largeConfigData []*PbDataEx
@@ -34,8 +34,6 @@ func Dispatch(genTasks func(chan func(int))) {
 	queue := make(chan func(int), totalGoroutines)
 	maxLatency, totalLatency := int64(0), int64(0)
 	cnt := int64(0)
-
-	runtime.GC()
 
 	for i := 0; i < totalGoroutines; i++ {
 		go func(routineId int) {
@@ -66,6 +64,7 @@ func Benchmark_LinearAc(t *testing.B) {
 	DbgMode = false
 	chunkPool.reserve(1600)
 	makeGlobalData()
+	runtime.GC()
 	t.StartTimer()
 
 	Dispatch(func(queue chan func(int)) {
@@ -92,6 +91,7 @@ func Benchmark_LinearAc(t *testing.B) {
 
 func Benchmark_buildInAc(t *testing.B) {
 	makeGlobalData()
+	runtime.GC()
 	t.StartTimer()
 
 	Dispatch(func(c chan func(int)) {
