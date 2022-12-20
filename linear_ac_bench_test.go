@@ -1,4 +1,4 @@
-package linear_ac
+package lac
 
 import (
 	"fmt"

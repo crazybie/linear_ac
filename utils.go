@@ -1,4 +1,4 @@
-package linear_ac
+package lac
 
 import (
 	"reflect"
@@ -42,6 +42,12 @@ type emptyInterface struct {
 
 //go:linkname reflect_typedmemmove reflect.typedmemmove
 func reflect_typedmemmove(typ, dst, src unsafe.Pointer)
+
+//go:linkname reflect_memclrNoHeapPointers reflect.memclrNoHeapPointers
+func reflect_memclrNoHeapPointers(ptr unsafe.Pointer, n uintptr)
+
+//go:linkname reflect_memmove reflect.memmove
+func reflect_memmove(to, from unsafe.Pointer, n uintptr)
 
 // GoroutineId
 
@@ -112,25 +118,11 @@ func data(i interface{}) unsafe.Pointer {
 }
 
 func copyBytes(src, dst unsafe.Pointer, len int) {
-	alignedEnd := len / ptrSize * ptrSize
-	i := 0
-	for ; i < alignedEnd; i += ptrSize {
-		*(*uintptr)(add(dst, i)) = *(*uintptr)(add(src, i))
-	}
-	for ; i < len; i++ {
-		*(*byte)(add(dst, i)) = *(*byte)(add(src, i))
-	}
+	reflect_memmove(dst, src, uintptr(len))
 }
 
 func clearBytes(dst unsafe.Pointer, len int) {
-	alignedEnd := len / ptrSize * ptrSize
-	i := 0
-	for ; i < alignedEnd; i += ptrSize {
-		*(*uintptr)(add(dst, i)) = 0
-	}
-	for ; i < len; i++ {
-		*(*byte)(add(dst, i)) = 0
-	}
+	reflect_memclrNoHeapPointers(dst, uintptr(len))
 }
 
 // syncPool

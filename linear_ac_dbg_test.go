@@ -1,4 +1,4 @@
-package linear_ac
+package lac
 
 import (
 	"runtime"
@@ -17,9 +17,8 @@ func Test_CheckArray(t *testing.T) {
 	type D struct {
 		v [4]*int
 	}
-	var d *D
-	ac.New(&d)
 
+	d := New[D](ac)
 	for i := 0; i < len(d.v); i++ {
 		d.v[i] = new(int)
 		*d.v[i] = i
@@ -34,9 +33,8 @@ func Test_CheckInternalSlice(t *testing.T) {
 	type D struct {
 		v []int
 	}
-	var d *D
-	ac.New(&d)
-	ac.NewSlice(&d.v, 1, 0)
+	d := New[D](ac)
+	d.v = NewSlice[int](ac, 1, 0)
 	ac.Release()
 }
 
@@ -52,8 +50,7 @@ func Test_CheckExternalSlice(t *testing.T) {
 	type D struct {
 		v []*int
 	}
-	var d *D
-	ac.New(&d)
+	d := New[D](ac)
 
 	d.v = make([]*int, 3)
 	for i := 0; i < len(d.v); i++ {
@@ -72,8 +69,7 @@ func TestUseAfterFree_Pointer(t *testing.T) {
 		}
 	}()
 	ac := BindNew()
-	var d *PbData
-	ac.New(&d)
+	d := New[PbData](ac)
 	d.Age = ac.Int(11)
 	ac.Release()
 	if *d.Age == 11 {
@@ -91,11 +87,8 @@ func TestUseAfterFree_StructPointer(t *testing.T) {
 	}()
 	ac := BindNew()
 
-	var d *PbData
-	ac.New(&d)
-	var item *PbItem
-	ac.New(&item)
-	d.InUse = item
+	d := New[PbData](ac)
+	d.InUse = New[PbItem](ac)
 
 	ac.Release()
 	c := *d.InUse
@@ -113,8 +106,7 @@ func TestUseAfterFree_Slice(t *testing.T) {
 	}()
 
 	ac := BindNew()
-	var d *PbData
-	ac.New(&d)
+	d := New[PbData](ac)
 	ac.NewSlice(&d.Items, 1, 1)
 	ac.Release()
 
@@ -130,9 +122,7 @@ func Test_WorkWithGc(t *testing.T) {
 	}
 
 	ac := BindNew()
-
-	var d *D
-	ac.New(&d)
+	d := New[D](ac)
 
 	for i := 0; i < len(d.v); i++ {
 		d.v[i] = ac.Int(i)
@@ -161,8 +151,7 @@ func TestLinearAllocator_ExternalMap(t *testing.T) {
 	type D struct {
 		m map[int]*int
 	}
-	var d *D
-	ac.New(&d)
+	d := New[D](ac)
 	d.m = make(map[int]*int)
 	ac.Release()
 }
@@ -175,8 +164,7 @@ func TestAllocator_CheckExternalEnum(t *testing.T) {
 		}
 	}()
 
-	var item *PbItem
-	ac.New(&item)
+	item := New[PbItem](ac)
 	item.EnumVal = new(EnumA)
 	ac.Release()
 }

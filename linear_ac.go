@@ -9,7 +9,7 @@
 // https://github.com/crazybie/linear_ac
 //
 
-package linear_ac
+package lac
 
 import (
 	"fmt"
@@ -365,10 +365,10 @@ func (ac *Allocator) Enum(e interface{}) interface{} {
 // Use 1 instead of nil or MaxUint64 to
 // 1. make non-nil check pass.
 // 2. generate a recoverable panic.
-const trickyAddress = uintptr(1)
+const nonNilPanicableAddr = uintptr(1)
 
 func (ac *Allocator) internalPointer(addr uintptr) bool {
-	if addr == 0 || addr == trickyAddress {
+	if addr == 0 || addr == nonNilPanicableAddr {
 		return true
 	}
 	for _, c := range ac.chunks {
@@ -403,7 +403,7 @@ func (ac *Allocator) CheckExternalPointers() {
 
 func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}]struct{}, invalidatePointers bool) error {
 	if val.Kind() == reflect.Ptr {
-		if val.Pointer() != trickyAddress && !val.IsNil() {
+		if val.Pointer() != nonNilPanicableAddr && !val.IsNil() {
 			if !ac.internalPointer(val.Pointer()) {
 				return fmt.Errorf("unexpected external pointer: %+v", val)
 			}
@@ -432,7 +432,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 					return fmt.Errorf("%v: %v", fieldName(i), err)
 				}
 				if invalidatePointers {
-					*(*uintptr)(unsafe.Pointer(f.UnsafeAddr())) = trickyAddress
+					*(*uintptr)(unsafe.Pointer(f.UnsafeAddr())) = nonNilPanicableAddr
 				}
 
 			case reflect.Slice:

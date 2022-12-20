@@ -1,4 +1,6 @@
-package linear_ac
+//go:build go1.18
+
+package lac
 
 import (
 	"fmt"
@@ -40,14 +42,12 @@ func Test_GoRoutineId(t *testing.T) {
 
 func Test_LinearAlloc(t *testing.T) {
 	ac := BindNew()
-	var d *PbData
-	ac.New(&d)
+	d := New[PbData](ac)
 	d.Age = ac.Int(11)
 
 	n := 3
 	for i := 0; i < n; i++ {
-		var item *PbItem
-		ac.New(&item)
+		item := New[PbItem](ac)
 		item.Id = ac.Int(i + 1)
 		item.Active = ac.Bool(true)
 		item.Price = ac.Int(100 + i)
@@ -85,8 +85,7 @@ func Test_String(t *testing.T) {
 	type D struct {
 		s [5]*string
 	}
-	var d *D
-	ac.New(&d)
+	d := New[D](ac)
 	for i := range d.s {
 		d.s[i] = ac.String(fmt.Sprintf("str%v", i))
 		runtime.GC()
@@ -107,9 +106,8 @@ func TestLinearAllocator_NewMap(t *testing.T) {
 	}
 	data := [10]*D{}
 	for i := 0; i < len(data); i++ {
-		var d *D
-		ac.New(&d)
-		ac.NewMap(&d.m)
+		d := New[D](ac)
+		d.m = NewMap[int, *int](ac)
 		d.m[1] = ac.Int(i)
 		data[i] = d
 		runtime.GC()
@@ -161,8 +159,7 @@ func TestLinearAllocator_NewSlice(t *testing.T) {
 	}
 
 	f := func() []int {
-		var r []int
-		ac.NewSlice(&r, 0, 1)
+		var r []int = NewSlice[int](ac, 0, 1)
 		ac.SliceAppend(&r, 1)
 		return r
 	}
@@ -201,12 +198,12 @@ func TestLinearAllocator_NewSlice(t *testing.T) {
 func TestLinearAllocator_NewCopy(b *testing.T) {
 	ac := BindNew()
 	for i := 0; i < 3; i++ {
-		d := ac.NewCopy(&PbItem{
+		d := NewCopy(ac, &PbItem{
 			Id:    ac.Int(1 + i),
 			Class: ac.Int(2 + i),
 			Price: ac.Int(3 + i),
 			Name:  ac.String("test"),
-		}).(*PbItem)
+		})
 
 		if *d.Id != 1+i {
 			b.Fail()
@@ -227,7 +224,7 @@ func TestLinearAllocator_NewCopy(b *testing.T) {
 func TestAllocator_Enum(t *testing.T) {
 	ac := BindNew()
 	e := EnumVal2
-	v := ac.Enum(e).(*EnumA)
+	v := Enum(ac, e)
 	if *v != e {
 		t.Fail()
 	}
@@ -236,19 +233,17 @@ func TestAllocator_Enum(t *testing.T) {
 
 func TestBuildInAllocator_All(t *testing.T) {
 	ac := buildInAc
-	var item *PbItem
-	ac.New(&item)
+	item := New[PbItem](ac)
 	item.Id = ac.Int(11)
 	if *item.Id != 11 {
 		t.Fail()
 	}
 	id2 := 22
-	item = ac.NewCopy(&PbItem{Id: &id2}).(*PbItem)
+	item = NewCopy(ac, &PbItem{Id: &id2})
 	if *item.Id != 22 {
 		t.Fail()
 	}
-	var s []*PbItem
-	ac.NewSlice(&s, 0, 3)
+	s := NewSlice[*PbItem](ac, 0, 3)
 	if cap(s) != 3 || len(s) != 0 {
 		t.Fail()
 	}
@@ -256,14 +251,13 @@ func TestBuildInAllocator_All(t *testing.T) {
 	if len(s) != 1 || *s[0].Id != 22 {
 		t.Fail()
 	}
-	var m map[int]string
-	ac.NewMap(&m)
+	m := NewMap[int, string](ac)
 	m[1] = "test"
 	if m[1] != "test" {
 		t.Fail()
 	}
 	e := EnumVal1
-	v := ac.Enum(e).(*EnumA)
+	v := Enum(ac, e)
 	if *v != e {
 		t.Fail()
 	}
