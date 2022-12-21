@@ -1,5 +1,3 @@
-//go:build go1.18
-
 package lac
 
 import (
@@ -224,7 +222,7 @@ func TestLinearAllocator_NewCopy(b *testing.T) {
 func TestAllocator_Enum(t *testing.T) {
 	ac := BindNew()
 	e := EnumVal2
-	v := Enum(ac, e)
+	v := NewEnum(ac, e)
 	if *v != e {
 		t.Fail()
 	}
@@ -257,7 +255,7 @@ func TestBuildInAllocator_All(t *testing.T) {
 		t.Fail()
 	}
 	e := EnumVal1
-	v := Enum(ac, e)
+	v := NewEnum(ac, e)
 	if *v != e {
 		t.Fail()
 	}
@@ -286,4 +284,24 @@ func TestBindAc(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+func TestLinearAllocator_NewExternalPtr(b *testing.T) {
+	ac := BindNew()
+	type D struct {
+		d [10]*int
+	}
+	d := New[D](ac)
+	for i := 0; i < len(d.d); i++ {
+		d.d[i] = ExternalPtr(ac, new(int))
+		//d.d[i] = new(int)
+		*d.d[i] = i
+		runtime.GC()
+	}
+	for i := 0; i < len(d.d); i++ {
+		if *d.d[i] != i {
+			b.Errorf("should not be gced.")
+		}
+	}
+	ac.Release()
 }

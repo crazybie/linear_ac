@@ -30,8 +30,8 @@ var (
 
 type chunk []byte
 
-var chunkPool = syncPool{
-	New: func() interface{} {
+var chunkPool = syncPool[chunk]{
+	New: func() *chunk {
 		ck := make(chunk, 0, ChunkSize)
 		return &ck
 	},
@@ -51,26 +51,25 @@ func init() {
 // Allocator
 
 type Allocator struct {
-	disabled bool
-	chunks   []*chunk
-	curChunk int
-	scanObjs []interface{}
-	maps     map[unsafe.Pointer]struct{}
+	disabled  bool
+	chunks    []*chunk
+	curChunk  int
+	refCnt    int
+	scanObjs  []interface{}
+	externals []interface{}
 }
 
 // buildInAc switches to native allocator.
 var buildInAc = &Allocator{disabled: true}
 
-var acPool = syncPool{
-	New: func() interface{} {
-		return NewLinearAc()
-	},
+var acPool = syncPool[Allocator]{
+	New: NewLac,
 }
 
-func NewLinearAc() *Allocator {
+func NewLac() *Allocator {
 	ac := &Allocator{
 		disabled: DisableLinearAc,
-		maps:     map[unsafe.Pointer]struct{}{},
+		refCnt:   1,
 	}
 	return ac
 }
@@ -80,7 +79,7 @@ func NewLinearAc() *Allocator {
 var acMap = sync.Map{}
 
 func BindNew() *Allocator {
-	ac := acPool.get().(*Allocator)
+	ac := acPool.get()
 	acMap.Store(goRoutineId(), ac)
 	return ac
 }
@@ -105,6 +104,17 @@ func (ac *Allocator) Release() {
 	ac.Unbind()
 	ac.reset()
 	acPool.put(ac)
+}
+
+func (ac *Allocator) IncRef() {
+	ac.refCnt++
+}
+
+func (ac *Allocator) DecRef() {
+	ac.refCnt--
+	if ac.refCnt <= 0 {
+		ac.Release()
+	}
 }
 
 func (ac *Allocator) reset() {
@@ -133,9 +143,8 @@ func (ac *Allocator) reset() {
 	ac.chunks = ac.chunks[:0]
 	ac.curChunk = 0
 
-	for k := range ac.maps {
-		delete(ac.maps, k)
-	}
+	// clear externals
+	ac.externals = ac.externals[:0]
 
 	ac.disabled = DisableLinearAc
 }
@@ -186,7 +195,7 @@ func (ac *Allocator) typedNew(ptrTp reflect.Type, zero bool) (ret interface{}) {
 
 func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 	if len(ac.chunks) == 0 {
-		ac.chunks = append(ac.chunks, chunkPool.get().(*chunk))
+		ac.chunks = append(ac.chunks, chunkPool.get())
 	}
 start:
 	cur := ac.chunks[ac.curChunk]
@@ -198,7 +207,7 @@ start:
 				c := make(chunk, 0, need)
 				ck = &c
 			} else {
-				ck = chunkPool.get().(*chunk)
+				ck = chunkPool.get()
 			}
 			ac.chunks = append(ac.chunks, ck)
 		} else if cap(*ac.chunks[ac.curChunk+1]) < need {
@@ -240,7 +249,11 @@ func (ac *Allocator) NewMap(mapPtr interface{}) {
 
 	m := reflect.MakeMap(reflect.TypeOf(mapPtrTemp).Elem())
 	reflect.ValueOf(mapPtrTemp).Elem().Set(m)
-	ac.maps[data(m.Interface())] = struct{}{}
+	ac.keepAlive(m.Interface())
+}
+
+func (ac *Allocator) keepAlive(ptr interface{}) {
+	ac.externals = append(ac.externals, ptr)
 }
 
 func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap int) {
@@ -377,6 +390,11 @@ func (ac *Allocator) internalPointer(addr uintptr) bool {
 			return true
 		}
 	}
+	for _, c := range ac.externals {
+		if data(c) == unsafe.Pointer(addr) {
+			return true
+		}
+	}
 	return false
 }
 
@@ -462,7 +480,14 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 
 			case reflect.Map:
 				m := *(*unsafe.Pointer)(unsafe.Pointer(f.UnsafeAddr()))
-				if _, ok := ac.maps[m]; !ok {
+				found := false
+				for _, i := range ac.externals {
+					if data(i) == m {
+						found = true
+						break
+					}
+				}
+				if !found {
 					return fmt.Errorf("%v: unexpected external map: %+v", fieldName(i), f)
 				}
 				for iter := f.MapRange(); iter.Next(); {
@@ -565,4 +590,40 @@ func (ac *Allocator) String(v string) (r *string) {
 		*r = ac.NewString(v)
 	}
 	return
+}
+
+//--------------------------------------
+// generic APIs
+//--------------------------------------
+
+func New[T any](ac *Allocator) *T {
+	var r *T
+	ac.New(&r)
+	return r
+}
+
+func NewCopy[T any](ac *Allocator, from *T) *T {
+	return ac.NewCopy(from).(*T)
+}
+
+func NewEnum[T any](ac *Allocator, e T) *T {
+	return ac.Enum(e).(*T)
+}
+
+func NewSlice[T any](ac *Allocator, len, cap int) []T {
+	var r []T
+	ac.NewSlice(&r, len, cap)
+	return r
+}
+
+func NewMap[K comparable, V any](ac *Allocator) map[K]V {
+	var r map[K]V
+	ac.NewMap(&r)
+	return r
+}
+
+// ExternalPtr stores the pointer on the function stack to prevent the gc sweep it.
+func ExternalPtr[T any](ac *Allocator, ptr T) T {
+	ac.keepAlive(ptr)
+	return ptr
 }

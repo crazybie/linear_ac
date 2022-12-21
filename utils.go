@@ -127,13 +127,13 @@ func clearBytes(dst unsafe.Pointer, len int) {
 
 // syncPool
 
-type syncPool struct {
+type syncPool[T any] struct {
 	sync.Mutex
-	New  func() interface{}
-	pool []interface{}
+	New  func() *T
+	pool []*T
 }
 
-func (p *syncPool) get() interface{} {
+func (p *syncPool[T]) get() *T {
 	p.Lock()
 	defer p.Unlock()
 	if len(p.pool) == 0 {
@@ -144,28 +144,27 @@ func (p *syncPool) get() interface{} {
 	return r
 }
 
-func (p *syncPool) put(v interface{}) {
+func (p *syncPool[T]) put(v *T) {
 	p.Lock()
 	defer p.Unlock()
 	p.pool = append(p.pool, v)
 }
 
-func (p *syncPool) putMany(v interface{}) {
-	r := reflect.ValueOf(v)
+func (p *syncPool[T]) putMany(v []*T) {
 	p.Lock()
 	defer p.Unlock()
-	for i := 0; i < r.Len(); i++ {
-		p.pool = append(p.pool, r.Index(i).Interface())
+	for i := 0; i < len(v); i++ {
+		p.pool = append(p.pool, v[i])
 	}
 }
 
-func (p *syncPool) clear() {
+func (p *syncPool[T]) clear() {
 	p.Lock()
 	defer p.Unlock()
 	p.pool = nil
 }
 
-func (p *syncPool) reserve(cnt int) {
+func (p *syncPool[T]) reserve(cnt int) {
 	p.Lock()
 	defer p.Unlock()
 	for i := 0; i < cnt; i++ {

@@ -126,20 +126,37 @@ func Test_WorkWithGc(t *testing.T) {
 
 	for i := 0; i < len(d.v); i++ {
 		d.v[i] = ac.Int(i)
-		//d.v[i] = new(int)
+		//d.v[i] = new(int) // this line makes this test failed.
 		*d.v[i] = i
 		runtime.GC()
 	}
 
 	for i, p := range d.v {
 		if *p != i {
-			t.Errorf("int %v is gced", i)
+			t.Errorf("int %v is gced: %v", i, *p)
 		}
 	}
 	ac.Release()
 }
 
-func TestLinearAllocator_ExternalMap(t *testing.T) {
+func TestLinearAllocator_CheckNewMap(t *testing.T) {
+	DbgMode = true
+	ac := BindNew()
+	defer func() {
+		if err := recover(); err != nil {
+			t.Errorf("faile to check")
+		}
+	}()
+
+	type D struct {
+		m map[int]*int
+	}
+	d := New[D](ac)
+	d.m = NewMap[int, *int](ac)
+	ac.Release()
+}
+
+func TestLinearAllocator_CheckExternalMap(t *testing.T) {
 	DbgMode = true
 	ac := BindNew()
 	defer func() {
