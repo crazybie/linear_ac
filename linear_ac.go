@@ -391,19 +391,27 @@ func (ac *Allocator) Enum(e interface{}) interface{} {
 // 2. generate a recoverable panic.
 const nonNilPanicableAddr = uintptr(1)
 
-func (ac *Allocator) internalPointer(addr uintptr) bool {
+func (ac *Allocator) internalPointer(addr uintptr, checkExternals bool) bool {
+
 	if addr == 0 || addr == nonNilPanicableAddr {
 		return true
 	}
+
+	if unsafe.Pointer(addr) == unsafe.Pointer(ac) {
+		return true
+	}
+
 	for _, c := range ac.chunks {
 		h := (*sliceHeader)(unsafe.Pointer(c))
 		if addr >= uintptr(h.Data) && addr < uintptr(h.Data)+uintptr(h.Cap) {
 			return true
 		}
 	}
-	for _, c := range ac.externals {
-		if data(c) == unsafe.Pointer(addr) {
-			return true
+	if checkExternals {
+		for _, c := range ac.externals {
+			if data(c) == unsafe.Pointer(addr) {
+				return true
+			}
 		}
 	}
 	return false
@@ -433,10 +441,17 @@ func (ac *Allocator) CheckExternalPointers() {
 func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}]struct{}, invalidatePointers bool) error {
 	if val.Kind() == reflect.Ptr {
 		if val.Pointer() != nonNilPanicableAddr && !val.IsNil() {
-			if !ac.internalPointer(val.Pointer()) {
+			if !ac.internalPointer(val.Pointer(), true) {
 				return fmt.Errorf("unexpected external pointer: %+v", val)
 			}
-			if val.Elem().Type().Kind() == reflect.Struct {
+
+			tp := val.Elem().Type()
+			if tp == reflect.TypeOf(ac).Elem() {
+				// stop scanning Allocator fields.
+				return nil
+			}
+
+			if tp.Kind() == reflect.Struct {
 				if err := ac.checkRecursively(val.Elem(), checked, invalidatePointers); err != nil {
 					return err
 				}
@@ -474,7 +489,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 							break
 						}
 					}
-					if !found && !ac.internalPointer((uintptr)(h.Data)) {
+					if !found && !ac.internalPointer((uintptr)(h.Data), false) {
 						return fmt.Errorf("%s: unexpected external slice: %s", fieldName(i), f.String())
 					}
 					for j := 0; j < f.Len(); j++ {

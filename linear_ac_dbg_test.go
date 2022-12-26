@@ -207,3 +207,21 @@ func TestAllocator_CheckExternalEnum(t *testing.T) {
 	item.EnumVal = new(EnumA)
 	ac.Release()
 }
+
+func TestAllocator_AcAsField(t *testing.T) {
+	DbgMode = true
+	ac := BindNew()
+	defer func() {
+		if err := recover(); err != nil {
+			t.Errorf("failed to check")
+		}
+	}()
+
+	type S struct {
+		ac *Allocator
+	}
+
+	s := New[S](ac)
+	s.ac = ac
+	ac.Release()
+}
