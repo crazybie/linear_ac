@@ -40,6 +40,11 @@ type emptyInterface struct {
 	Data unsafe.Pointer
 }
 
+type reflectedValue struct {
+	Type unsafe.Pointer
+	Ptr  unsafe.Pointer
+}
+
 //go:linkname reflect_typedmemmove reflect.typedmemmove
 func reflect_typedmemmove(typ, dst, src unsafe.Pointer)
 
@@ -49,7 +54,9 @@ func reflect_memclrNoHeapPointers(ptr unsafe.Pointer, n uintptr)
 //go:linkname reflect_memmove reflect.memmove
 func reflect_memmove(to, from unsafe.Pointer, n uintptr)
 
+//============================================================================
 // GoroutineId
+//============================================================================
 
 // https://notes.volution.ro/v1/2019/08/notes/23e3644e/
 
@@ -117,6 +124,14 @@ func data(i interface{}) unsafe.Pointer {
 	return (*emptyInterface)(unsafe.Pointer(&i)).Data
 }
 
+func interfaceOfUnexported(v reflect.Value) (ret interface{}) {
+	v2 := (*reflectedValue)(unsafe.Pointer(&v))
+	r := (*emptyInterface)(unsafe.Pointer(&ret))
+	r.Type = v2.Type
+	r.Data = v2.Ptr
+	return
+}
+
 func copyBytes(src, dst unsafe.Pointer, len int) {
 	reflect_memmove(dst, src, uintptr(len))
 }
@@ -125,7 +140,9 @@ func clearBytes(dst unsafe.Pointer, len int) {
 	reflect_memclrNoHeapPointers(dst, uintptr(len))
 }
 
+//============================================================================
 // syncPool
+//============================================================================
 
 type syncPool[T any] struct {
 	sync.Mutex

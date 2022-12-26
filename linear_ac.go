@@ -59,19 +59,23 @@ type Allocator struct {
 	externals []interface{}
 }
 
-// buildInAc switches to native allocator.
-var buildInAc = &Allocator{disabled: true}
+// BuildInAc switches to native allocator.
+var BuildInAc = &Allocator{disabled: true}
 
 var acPool = syncPool[Allocator]{
-	New: NewLac,
+	New: newLac,
 }
 
-func NewLac() *Allocator {
+func newLac() *Allocator {
 	ac := &Allocator{
 		disabled: DisableLinearAc,
 		refCnt:   1,
 	}
 	return ac
+}
+
+func Get() *Allocator {
+	return acPool.get()
 }
 
 // Bind allocator to goroutine
@@ -84,21 +88,21 @@ func BindNew() *Allocator {
 	return ac
 }
 
-func Get() *Allocator {
+func BindGet() *Allocator {
 	if val, ok := acMap.Load(goRoutineId()); ok {
 		return val.(*Allocator)
 	}
-	return buildInAc
+	return BuildInAc
 }
 
 func (ac *Allocator) Unbind() {
-	if Get() == ac {
+	if BindGet() == ac {
 		acMap.Delete(goRoutineId())
 	}
 }
 
 func (ac *Allocator) Release() {
-	if ac == buildInAc {
+	if ac == BuildInAc {
 		return
 	}
 	ac.Unbind()
@@ -147,6 +151,7 @@ func (ac *Allocator) reset() {
 	ac.externals = ac.externals[:0]
 
 	ac.disabled = DisableLinearAc
+	ac.refCnt = 1
 }
 
 func (ac *Allocator) New(ptrToPtr interface{}) {
@@ -253,6 +258,12 @@ func (ac *Allocator) NewMap(mapPtr interface{}) {
 }
 
 func (ac *Allocator) keepAlive(ptr interface{}) {
+	if ac.disabled {
+		return
+	}
+	if data(ptr) == nil {
+		return
+	}
 	ac.externals = append(ac.externals, ptr)
 }
 
@@ -414,7 +425,7 @@ func (ac *Allocator) debugCheck(invalidatePointers bool) {
 }
 
 // CheckExternalPointers is useful for if you want to check external pointers but don't want to invalidate pointers.
-// e.g. using ac as config memory allocator globally.
+// e.g. using lac as memory allocator for config data globally.
 func (ac *Allocator) CheckExternalPointers() {
 	ac.debugCheck(false)
 }
@@ -429,7 +440,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 				if err := ac.checkRecursively(val.Elem(), checked, invalidatePointers); err != nil {
 					return err
 				}
-				checked[val.Interface()] = struct{}{}
+				checked[interfaceOfUnexported(val)] = struct{}{}
 			}
 		}
 		return nil
@@ -456,7 +467,14 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 			case reflect.Slice:
 				h := (*sliceHeader)(unsafe.Pointer(f.UnsafeAddr()))
 				if f.Len() > 0 && h.Data != nil {
-					if !ac.internalPointer((uintptr)(h.Data)) {
+					found := false
+					for _, i := range ac.externals {
+						if (*sliceHeader)(data(i)).Data == h.Data {
+							found = true
+							break
+						}
+					}
+					if !found && !ac.internalPointer((uintptr)(h.Data)) {
 						return fmt.Errorf("%s: unexpected external slice: %s", fieldName(i), f.String())
 					}
 					for j := 0; j < f.Len(); j++ {

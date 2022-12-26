@@ -60,6 +60,28 @@ func Test_CheckExternalSlice(t *testing.T) {
 	ac.Release()
 }
 
+func Test_CheckKnownExternalSlice(t *testing.T) {
+	DbgMode = true
+	ac := BindNew()
+	defer func() {
+		if err := recover(); err != nil {
+			t.Errorf("faile to check")
+		}
+	}()
+
+	type D struct {
+		v []*int
+	}
+	d := New[D](ac)
+
+	d.v = ExternalPtr(ac, make([]*int, 3))
+	for i := 0; i < len(d.v); i++ {
+		d.v[i] = ExternalPtr(ac, new(int))
+		*d.v[i] = i
+	}
+	ac.Release()
+}
+
 func TestUseAfterFree_Pointer(t *testing.T) {
 	DbgMode = true
 	defer func() {
