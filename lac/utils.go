@@ -1,13 +1,11 @@
-//
-// Copyright (C) 2020-2021 crazybie@github.com.
-//
-//
-// Linear Allocator
-//
-// Improve the memory allocation and garbage collection performance.
-//
-// https://github.com/crazybie/linear_ac
-//
+/*
+ * Linear Allocator
+ *
+ * Improve the memory allocation and garbage collection performance.
+ *
+ * Copyright (C) 2020-2021 crazybie@github.com.
+ * https://github.com/crazybie/linear_ac
+ */
 
 package lac
 

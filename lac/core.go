@@ -1,13 +1,11 @@
-//
-// Copyright (C) 2020-2021 crazybie@github.com.
-//
-//
-// Linear Allocator
-//
-// Improve the memory allocation and garbage collection performance.
-//
-// https://github.com/crazybie/linear_ac
-//
+/*
+ * Linear Allocator
+ *
+ * Improve the memory allocation and garbage collection performance.
+ *
+ * Copyright (C) 2020-2021 crazybie@github.com.
+ * https://github.com/crazybie/linear_ac
+ */
 
 package lac
 
@@ -61,8 +59,8 @@ func newLac() *Allocator {
 	ac := &Allocator{
 		disabled: DisableLinearAc,
 		refCnt:   1,
+		chunks:   make([]*chunk, 0, 1),
 	}
-	ac.chunks = append(ac.chunks, chunkPool.get())
 	return ac
 }
 
@@ -122,6 +120,9 @@ func (ac *Allocator) typedNew(ptrTp reflect.Type, zero bool) (ret interface{}) {
 }
 
 func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
+	if len(ac.chunks) == 0 {
+		ac.chunks = append(ac.chunks, chunkPool.get())
+	}
 start:
 	cur := ac.chunks[ac.curChunk]
 	used := len(*cur)
