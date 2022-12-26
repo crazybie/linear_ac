@@ -305,3 +305,19 @@ func TestLinearAllocator_NewExternalPtr(b *testing.T) {
 	}
 	ac.Release()
 }
+
+func TestLinearAllocator_NewCopyNoAlloc(b *testing.T) {
+	chunkPool.reserve(1)
+	ac := BindNew()
+	defer ac.Release()
+
+	var s, e runtime.MemStats
+	runtime.ReadMemStats(&s)
+	item := NewCopy(ac, &PbItem{})
+	runtime.ReadMemStats(&e)
+	if e.Mallocs-s.Mallocs > 0 {
+		b.Fail()
+	}
+
+	runtime.KeepAlive(item)
+}

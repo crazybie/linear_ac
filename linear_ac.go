@@ -71,6 +71,7 @@ func newLac() *Allocator {
 		disabled: DisableLinearAc,
 		refCnt:   1,
 	}
+	ac.chunks = append(ac.chunks, chunkPool.get())
 	return ac
 }
 
@@ -171,6 +172,7 @@ func (ac *Allocator) New(ptrToPtr interface{}) {
 // NewCopy is useful for code migration.
 // native mode is slower than new() due to the additional memory move from stack to heap,
 // this is on purpose to avoid heap alloc in linear mode.
+// noEscape is to cheat the escape analyser to avoid heap alloc.
 func (ac *Allocator) NewCopy(ptr interface{}) (ret interface{}) {
 	ptrTemp := noEscape(ptr)
 	ptrType := reflect.TypeOf(ptrTemp)
@@ -199,9 +201,6 @@ func (ac *Allocator) typedNew(ptrTp reflect.Type, zero bool) (ret interface{}) {
 }
 
 func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
-	if len(ac.chunks) == 0 {
-		ac.chunks = append(ac.chunks, chunkPool.get())
-	}
 start:
 	cur := ac.chunks[ac.curChunk]
 	used := len(*cur)
