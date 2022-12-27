@@ -10,7 +10,9 @@
 package lac
 
 import (
+	"reflect"
 	"sync"
+	"unsafe"
 )
 
 // BuildInAc switches to native allocator.
@@ -163,9 +165,7 @@ func (ac *Allocator) String(v string) (r *string) {
 //--------------------------------------
 
 func New[T any](ac *Allocator) *T {
-	var r *T
-	ac.New(&r)
-	return r
+	return ac.typedNew(reflect.TypeOf((*T)(nil)), true).(*T)
 }
 
 func NewCopy[T any](ac *Allocator, from *T) *T {
@@ -182,11 +182,6 @@ func NewSlice[T any](ac *Allocator, len, cap int) []T {
 	return r
 }
 
-func Append[T any](ac *Allocator, s []T, v T) []T {
-	ac.SliceAppend(&s, v)
-	return s
-}
-
 func NewMap[K comparable, V any](ac *Allocator) map[K]V {
 	var r map[K]V
 	ac.NewMap(&r)
@@ -196,4 +191,39 @@ func NewMap[K comparable, V any](ac *Allocator) map[K]V {
 func AttachExternal[T any](ac *Allocator, ptr T) T {
 	ac.keepAlive(ptr)
 	return ptr
+}
+
+// Append works with no malloc, but caller side has weired malloc.
+// prefer the no-generic version: SliceAppend.
+func Append[T any](ac *Allocator, s []T, v T) []T {
+
+	if ac.disabled {
+		return append(s, v)
+	}
+
+	header := (*sliceHeader)(unsafe.Pointer(&s))
+	elemSz := int(unsafe.Sizeof(v))
+
+	// grow
+	if header.Len >= header.Cap {
+		pre := *header
+		if header.Cap >= 16 {
+			header.Cap = int(float32(header.Cap) * 1.5)
+		} else {
+			header.Cap *= 2
+		}
+		if header.Cap == 0 {
+			header.Cap = 1
+		}
+		header.Data = ac.alloc(header.Cap*elemSz, false)
+		copyBytes(pre.Data, header.Data, pre.Len*elemSz)
+	}
+
+	// append
+	if header.Len < header.Cap {
+		dst := add(header.Data, elemSz*header.Len)
+		copyBytes(unsafe.Pointer(&v), dst, elemSz)
+		header.Len++
+	}
+	return s
 }

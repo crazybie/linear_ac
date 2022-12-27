@@ -10,6 +10,7 @@
 package lac
 
 import (
+	"fmt"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -121,6 +122,7 @@ func forceStackSplit(i int) int {
 }
 
 // noEscape is to cheat the escape analyser to avoid heap alloc.
+//
 //go:noinline
 //go:nosplit
 func noEscape(p interface{}) (ret interface{}) {
@@ -148,6 +150,16 @@ func copyBytes(src, dst unsafe.Pointer, len int) {
 
 func clearBytes(dst unsafe.Pointer, len int) {
 	reflect_memclrNoHeapPointers(dst, uintptr(len))
+}
+
+func noMalloc(f func()) {
+	var s, e runtime.MemStats
+	runtime.ReadMemStats(&s)
+	f()
+	runtime.ReadMemStats(&e)
+	if n := e.Mallocs - s.Mallocs; n > 0 {
+		panic(fmt.Errorf("has %v malloc", n))
+	}
 }
 
 //============================================================================

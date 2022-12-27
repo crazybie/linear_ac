@@ -24,18 +24,7 @@ func TestAllocator_AttachExternalNoAlloc(t *testing.T) {
 	defer ac.Release()
 
 	s := new(int)
-	NoMalloc(func() {
-		AttachExternal(ac, s)
-	})
-}
-
-func TestAllocator_AttachExternalSliceNoAlloc(t *testing.T) {
-	ac := Get()
-	ac.externalSlice = make([]unsafe.Pointer, 0, 4)
-	defer ac.Release()
-
-	s := make([]int, 1)
-	NoMalloc(func() {
+	noMalloc(func() {
 		AttachExternal(ac, s)
 	})
 }
@@ -46,7 +35,7 @@ func TestAllocator_AttachExternalIface(t *testing.T) {
 	defer ac.Release()
 
 	i := new(int)
-	NoMalloc(func() {
+	noMalloc(func() {
 		var v interface{} = i
 		AttachExternal(ac, v)
 	})
@@ -77,7 +66,9 @@ func TestBindAc(t *testing.T) {
 }
 
 func TestLinearAllocator_NewExternalPtr(b *testing.T) {
-	ac := BindNew()
+	ac := Get()
+	defer ac.Release()
+
 	type D struct {
 		d [10]*int
 	}
@@ -93,10 +84,9 @@ func TestLinearAllocator_NewExternalPtr(b *testing.T) {
 			b.Errorf("should not be gced.")
 		}
 	}
-	ac.Release()
 }
 
-func Test_Append(t *testing.T) {
+func Test_GenericAppend(t *testing.T) {
 	ac := Get()
 	defer ac.Release()
 
@@ -104,6 +94,7 @@ func Test_Append(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		for j := 0; j < 10; j++ {
+			// has 1 malloc after Append returns.
 			m[i] = Append(ac, m[i], j)
 		}
 	}
@@ -115,5 +106,33 @@ func Test_Append(t *testing.T) {
 			}
 		}
 	}
+}
 
+func Test_AppendNoMalloc(t *testing.T) {
+	chunkPool.reserve(1)
+	ac := Get()
+	defer ac.Release()
+
+	m := map[int][]int{}
+	// init map buckets
+	for i := 0; i < 10; i++ {
+		m[i] = nil
+	}
+
+	noMalloc(func() {
+		for i := 0; i < 10; i++ {
+			for j := 0; j < 10; j++ {
+				s := m[i]
+				ac.SliceAppend(&s, j)
+				m[i] = s
+			}
+		}
+	})
+	for i := 0; i < 10; i++ {
+		for j := 0; j < 10; j++ {
+			if m[i][j] != j {
+				t.Fail()
+			}
+		}
+	}
 }

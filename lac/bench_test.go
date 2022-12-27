@@ -37,7 +37,6 @@ func makeGlobalData() {
 }
 
 func Dispatch(genTasks func(chan func(int))) {
-
 	wait := sync.WaitGroup{}
 	wait.Add(totalGoroutines)
 	queue := make(chan func(int), totalGoroutines)
@@ -87,7 +86,7 @@ func Benchmark_LinearAc(t *testing.B) {
 
 				for n := 0; n < subLoop; n++ {
 					ac := BindNew()
-					_ = makeDataAc(n)
+					_ = makeDataAc(ac, n)
 					ac.Release()
 				}
 			}
@@ -197,23 +196,23 @@ var makeItem = func(j int) *PbItemEx {
 }
 
 var makeItemAc = func(j int, ac *Allocator) *PbItemEx {
-	return ac.NewCopy(&PbItemEx{
-		Id1:     ac.Int(2 + j),
-		Id2:     ac.Int(2 + j),
-		Id3:     ac.Int(2 + j),
-		Id4:     ac.Int(2 + j),
-		Id5:     ac.Int(2 + j),
-		Id6:     ac.Int(2 + j),
-		Id7:     ac.Int(2 + j),
-		Id8:     ac.Int(2 + j),
-		Id9:     ac.Int(2 + j),
-		Id10:    ac.Int(2 + j),
-		Price:   ac.Int(100 + j),
-		Class:   ac.Int(3 + j),
-		Name1:   ac.String("name"),
-		Active:  ac.Bool(true),
-		EnumVal: ac.Enum(EnumVal2).(*EnumA),
-	}).(*PbItemEx)
+	r := New[PbItemEx](ac)
+	r.Id1 = ac.Int(2 + j)
+	r.Id2 = ac.Int(2 + j)
+	r.Id3 = ac.Int(2 + j)
+	r.Id4 = ac.Int(2 + j)
+	r.Id5 = ac.Int(2 + j)
+	r.Id6 = ac.Int(2 + j)
+	r.Id7 = ac.Int(2 + j)
+	r.Id8 = ac.Int(2 + j)
+	r.Id9 = ac.Int(2 + j)
+	r.Id10 = ac.Int(2 + j)
+	r.Price = ac.Int(100 + j)
+	r.Class = ac.Int(3 + j)
+	r.Name1 = ac.String("name")
+	r.Active = ac.Bool(true)
+	r.EnumVal = ac.Enum(EnumVal2).(*EnumA)
+	return r
 }
 
 var itemLoop = 10
@@ -272,11 +271,9 @@ func makeData(i int) *PbDataEx {
 	return d
 }
 
-func makeDataAc(i int) *PbDataEx {
-	ac := Get()
+func makeDataAc(ac *Allocator, i int) *PbDataEx {
 
-	var d *PbDataEx
-	ac.New(&d)
+	d := New[PbDataEx](ac)
 	d.Age1 = ac.Int(11 + i)
 	d.Age2 = ac.Int(11 + i)
 	d.Age3 = ac.Int(11 + i)

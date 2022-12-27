@@ -268,23 +268,13 @@ func TestBuildInAllocator_All(t *testing.T) {
 	ac.Release()
 }
 
-func NoMalloc(f func()) {
-	var s, e runtime.MemStats
-	runtime.ReadMemStats(&s)
-	f()
-	runtime.ReadMemStats(&e)
-	if n := e.Mallocs - s.Mallocs; n > 0 {
-		panic(fmt.Errorf("has %v malloc", n))
-	}
-}
-
 func TestLinearAllocator_NewCopyNoAlloc(b *testing.T) {
 	chunkPool.reserve(1)
 	ac := BindNew()
 	defer ac.Release()
 
 	var r *PbItem
-	NoMalloc(func() {
+	noMalloc(func() {
 		r = NewCopy(ac, &PbItem{})
 		//r = new(PbItem)
 	})

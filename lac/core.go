@@ -75,12 +75,11 @@ func (ac *Allocator) keepAlive(ptr interface{}) {
 		return
 	}
 
-	ptrTmp := noEscape(ptr)
-	d := data(ptrTmp)
+	d := data(ptr)
 	if d == nil {
 		return
 	}
-	switch reflect.TypeOf(ptrTmp).Kind() {
+	switch reflect.TypeOf(ptr).Kind() {
 	case reflect.Ptr:
 		ac.externalPtr = append(ac.externalPtr, d)
 	case reflect.Slice:
@@ -88,7 +87,7 @@ func (ac *Allocator) keepAlive(ptr interface{}) {
 	case reflect.Map:
 		ac.externalMap = append(ac.externalMap, d)
 	default:
-		panic(fmt.Errorf("unsupported type %v", reflect.TypeOf(ptrTmp).String()))
+		panic(fmt.Errorf("unsupported type %v", reflect.TypeOf(ptr).String()))
 	}
 }
 
@@ -286,6 +285,8 @@ func (ac *Allocator) CopySlice(slice interface{}) (ret interface{}) {
 	return ret
 }
 
+// SliceAppend with no malloc.
+// NOTE: the generic version has weird malloc thus not provided.
 func (ac *Allocator) SliceAppend(slicePtr interface{}, elem interface{}) {
 	slicePtrTmp := noEscape(slicePtr)
 
