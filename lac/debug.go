@@ -27,7 +27,7 @@ func (ac *Allocator) internalPointer(addr uintptr) bool {
 		return true
 	}
 
-	if unsafe.Pointer(addr) == unsafe.Pointer(ac) {
+	if addr == uintptr(unsafe.Pointer(ac)) {
 		return true
 	}
 
@@ -39,7 +39,7 @@ func (ac *Allocator) internalPointer(addr uintptr) bool {
 	}
 
 	for _, c := range ac.externalPtr {
-		if c == unsafe.Pointer(addr) {
+		if uintptr(c) == addr {
 			return true
 		}
 	}
