@@ -273,7 +273,7 @@ func TestBuildInAllocator_All(t *testing.T) {
 
 func TestBindAc(t *testing.T) {
 	useAc := func() *Allocator {
-		return Get()
+		return BindGet()
 	}
 
 	wg := sync.WaitGroup{}
@@ -302,7 +302,7 @@ func TestLinearAllocator_NewExternalPtr(b *testing.T) {
 	}
 	d := New[D](ac)
 	for i := 0; i < len(d.d); i++ {
-		d.d[i] = AttachExternalPtr(ac, new(int))
+		d.d[i] = AttachExternal(ac, new(int))
 		//d.d[i] = new(int)
 		*d.d[i] = i
 		runtime.GC()

@@ -188,17 +188,7 @@ func NewMap[K comparable, V any](ac *Allocator) map[K]V {
 	return r
 }
 
-func AttachExternalPtr[T any](ac *Allocator, ptr *T) *T {
+func AttachExternal[T any](ac *Allocator, ptr T) T {
 	ac.keepAlive(ptr)
 	return ptr
-}
-
-func AttachExternalSlice[T any](ac *Allocator, s []T) []T {
-	ac.keepAlive(s)
-	return s
-}
-
-func AttachExternalMap[K comparable, V any](ac *Allocator, m map[K]V) map[K]V {
-	ac.keepAlive(m)
-	return m
 }

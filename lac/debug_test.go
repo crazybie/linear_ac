@@ -83,9 +83,9 @@ func Test_CheckKnownExternalSlice(t *testing.T) {
 	}
 	d := New[D](ac)
 
-	d.v = AttachExternalSlice(ac, make([]*int, 3))
+	d.v = AttachExternal(ac, make([]*int, 3))
 	for i := 0; i < len(d.v); i++ {
-		d.v[i] = AttachExternalPtr(ac, new(int))
+		d.v[i] = AttachExternal(ac, new(int))
 		*d.v[i] = i
 	}
 	ac.Release()

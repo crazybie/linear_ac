@@ -14,22 +14,36 @@ import (
 	"unsafe"
 )
 
-func TestAllocator_ExternalPtrNoAlloc(t *testing.T) {
+func TestAllocator_AttachExternalNoAlloc(t *testing.T) {
 	ac := Get()
-	defer ac.Release()
-	s := new(int)
 	ac.externalPtr = make([]unsafe.Pointer, 0, 4)
+	defer ac.Release()
+
+	s := new(int)
 	NoMalloc(func() {
-		AttachExternalPtr(ac, s)
+		AttachExternal(ac, s)
 	})
 }
 
-func TestAllocator_ExternalSliceNoAlloc(t *testing.T) {
+func TestAllocator_AttachExternalSliceNoAlloc(t *testing.T) {
 	ac := Get()
-	defer ac.Release()
-	s := make([]int, 1)
 	ac.externalSlice = make([]unsafe.Pointer, 0, 4)
+	defer ac.Release()
+
+	s := make([]int, 1)
 	NoMalloc(func() {
-		AttachExternalSlice(ac, s)
+		AttachExternal(ac, s)
+	})
+}
+
+func TestAllocator_AttachExternalIface(t *testing.T) {
+	ac := Get()
+	ac.externalPtr = make([]unsafe.Pointer, 0, 4)
+	defer ac.Release()
+
+	i := new(int)
+	NoMalloc(func() {
+		var v interface{} = i
+		AttachExternal(ac, v)
 	})
 }

@@ -10,6 +10,7 @@
 package lac
 
 import (
+	"fmt"
 	"reflect"
 	"runtime"
 	"sync"
@@ -70,21 +71,24 @@ func newLac() *Allocator {
 }
 
 func (ac *Allocator) keepAlive(ptr interface{}) {
-	ptrTemp := noEscape(ptr)
 	if ac.disabled {
 		return
 	}
-	d := data(ptrTemp)
+
+	ptrTmp := noEscape(ptr)
+	d := data(ptrTmp)
 	if d == nil {
 		return
 	}
-	switch reflect.TypeOf(ptrTemp).Kind() {
+	switch reflect.TypeOf(ptrTmp).Kind() {
 	case reflect.Ptr:
 		ac.externalPtr = append(ac.externalPtr, d)
 	case reflect.Slice:
 		ac.externalSlice = append(ac.externalSlice, (*sliceHeader)(d).Data)
 	case reflect.Map:
 		ac.externalMap = append(ac.externalMap, d)
+	default:
+		panic(fmt.Errorf("unsupported type %v", reflect.TypeOf(ptrTmp).String()))
 	}
 }
 
