@@ -67,7 +67,12 @@ func main() {
 
 ## Benchmark
 Results from benchmark tests:
+
+- GC overhead\
 ![bench](./bench.png)
+- Allocation performance compare with arena allocator of v1.20.\
+![bench](./bench_arena.png)
+- Latency under heavy allocation case. 
 ``` 
 Benchmark_LinearAc
 >> Latency: max=944ms, avg=6ms.
