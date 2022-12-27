@@ -127,7 +127,6 @@ func makeDataArena(ac *arena.Arena, i int) *PbDataEx {
 
 func Benchmark_LacMallocLarge(t *testing.B) {
 	DbgMode = false
-	chunkPool.reserve(1600)
 	runtime.GC()
 	t.StartTimer()
 
