@@ -16,6 +16,8 @@ import (
 	"unsafe"
 )
 
+const PtrSize = int(unsafe.Sizeof(uintptr(0)))
+
 var (
 	DbgMode         = false
 	DisableLinearAc = false
@@ -47,12 +49,15 @@ func init() {
 // Allocator
 
 type Allocator struct {
-	disabled  bool
-	chunks    []*chunk
-	curChunk  int
-	refCnt    int
-	scanObjs  []interface{}
-	externals []interface{}
+	disabled    bool
+	chunks      []*chunk
+	curChunk    int
+	refCnt      int
+	dbgScanObjs []interface{}
+
+	externalPtr   []unsafe.Pointer
+	externalSlice []unsafe.Pointer
+	externalMap   []interface{}
 }
 
 func newLac() *Allocator {
@@ -65,13 +70,22 @@ func newLac() *Allocator {
 }
 
 func (ac *Allocator) keepAlive(ptr interface{}) {
+	ptrTemp := noEscape(ptr)
 	if ac.disabled {
 		return
 	}
-	if data(ptr) == nil {
+	d := data(ptrTemp)
+	if d == nil {
 		return
 	}
-	ac.externals = append(ac.externals, ptr)
+	switch reflect.TypeOf(ptrTemp).Kind() {
+	case reflect.Ptr:
+		ac.externalPtr = append(ac.externalPtr, d)
+	case reflect.Slice:
+		ac.externalSlice = append(ac.externalSlice, (*sliceHeader)(d).Data)
+	case reflect.Map:
+		ac.externalMap = append(ac.externalMap, d)
+	}
 }
 
 func (ac *Allocator) reset() {
@@ -81,7 +95,7 @@ func (ac *Allocator) reset() {
 
 	if DbgMode {
 		ac.debugCheck(true)
-		ac.scanObjs = ac.scanObjs[:0]
+		ac.dbgScanObjs = ac.dbgScanObjs[:0]
 	}
 
 	for _, ck := range ac.chunks {
@@ -101,7 +115,9 @@ func (ac *Allocator) reset() {
 	ac.curChunk = 0
 
 	// clear externals
-	ac.externals = ac.externals[:0]
+	ac.externalPtr = ac.externalPtr[:0]
+	ac.externalSlice = ac.externalSlice[:0]
+	ac.externalMap = ac.externalMap[:0]
 
 	ac.disabled = DisableLinearAc
 	ac.refCnt = 1
@@ -113,7 +129,7 @@ func (ac *Allocator) typedNew(ptrTp reflect.Type, zero bool) (ret interface{}) {
 	*(*emptyInterface)(unsafe.Pointer(&ret)) = emptyInterface{data(ptrTp), ptr}
 	if DbgMode {
 		if objType.Kind() == reflect.Struct {
-			ac.scanObjs = append(ac.scanObjs, ret)
+			ac.dbgScanObjs = append(ac.dbgScanObjs, ret)
 		}
 	}
 	return
@@ -123,36 +139,36 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 	if len(ac.chunks) == 0 {
 		ac.chunks = append(ac.chunks, chunkPool.get())
 	}
+	aligned := (need + PtrSize + 1) & ^(PtrSize - 1)
 start:
 	cur := ac.chunks[ac.curChunk]
 	used := len(*cur)
-	if used+need > cap(*cur) {
+	if used+aligned > cap(*cur) {
 		if ac.curChunk == len(ac.chunks)-1 {
 			var ck *chunk
-			if need > ChunkSize {
-				c := make(chunk, 0, need)
+			if aligned > ChunkSize {
+				c := make(chunk, 0, aligned)
 				ck = &c
 			} else {
 				ck = chunkPool.get()
 			}
 			ac.chunks = append(ac.chunks, ck)
-		} else if cap(*ac.chunks[ac.curChunk+1]) < need {
+		} else if cap(*ac.chunks[ac.curChunk+1]) < aligned {
 			chunkPool.put(ac.chunks[ac.curChunk+1])
-			ck := make(chunk, 0, need)
+			ck := make(chunk, 0, aligned)
 			ac.chunks[ac.curChunk+1] = &ck
 		}
 		ac.curChunk++
 		goto start
 	}
-	*cur = (*cur)[:used+need]
+	*cur = (*cur)[:used+aligned]
 	ptr := add((*sliceHeader)(unsafe.Pointer(cur)).Data, used)
 	if zero {
-		clearBytes(ptr, need)
+		clearBytes(ptr, aligned)
 	}
 	return ptr
 }
 
-// noEscape is to cheat the escape analyser to avoid heap alloc.
 func (ac *Allocator) New(ptrToPtr interface{}) {
 	tmp := noEscape(ptrToPtr)
 
@@ -170,7 +186,6 @@ func (ac *Allocator) New(ptrToPtr interface{}) {
 // NewCopy is useful for code migration.
 // native mode is slower than new() due to the additional memory move from stack to heap,
 // this is on purpose to avoid heap alloc in linear mode.
-// noEscape is to cheat the escape analyser to avoid heap alloc.
 func (ac *Allocator) NewCopy(ptr interface{}) (ret interface{}) {
 	ptrTemp := noEscape(ptr)
 	ptrType := reflect.TypeOf(ptrTemp)
@@ -212,7 +227,6 @@ func (ac *Allocator) NewMap(mapPtr interface{}) {
 	ac.keepAlive(m.Interface())
 }
 
-// noEscape is to cheat the escape analyser to avoid heap alloc.
 func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap int) {
 	slicePtrTmp := noEscape(slicePtr)
 
@@ -237,7 +251,6 @@ func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap int) {
 }
 
 // CopySlice is useful to create simple slice (simple type as element).
-// noEscape is to cheat the escape analyser to avoid heap alloc.
 func (ac *Allocator) CopySlice(slice interface{}) (ret interface{}) {
 	sliceTmp := noEscape(slice)
 	if ac.disabled {
@@ -269,7 +282,6 @@ func (ac *Allocator) CopySlice(slice interface{}) (ret interface{}) {
 	return ret
 }
 
-// noEscape is to cheat the escape analyser to avoid heap alloc.
 func (ac *Allocator) SliceAppend(slicePtr interface{}, elem interface{}) {
 	slicePtrTmp := noEscape(slicePtr)
 
@@ -321,7 +333,6 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, elem interface{}) {
 	}
 }
 
-// noEscape is to cheat the escape analyser to avoid heap alloc.
 func (ac *Allocator) Enum(e interface{}) interface{} {
 	temp := noEscape(e)
 	if ac.disabled {

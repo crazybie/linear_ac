@@ -302,7 +302,7 @@ func TestLinearAllocator_NewExternalPtr(b *testing.T) {
 	}
 	d := New[D](ac)
 	for i := 0; i < len(d.d); i++ {
-		d.d[i] = ExternalPtr(ac, new(int))
+		d.d[i] = AttachExternalPtr(ac, new(int))
 		//d.d[i] = new(int)
 		*d.d[i] = i
 		runtime.GC()
@@ -315,18 +315,37 @@ func TestLinearAllocator_NewExternalPtr(b *testing.T) {
 	ac.Release()
 }
 
+func NoMalloc(f func()) {
+	var s, e runtime.MemStats
+	runtime.ReadMemStats(&s)
+	f()
+	runtime.ReadMemStats(&e)
+	if n := e.Mallocs - s.Mallocs; n > 0 {
+		panic(fmt.Errorf("has %v malloc", n))
+	}
+}
+
 func TestLinearAllocator_NewCopyNoAlloc(b *testing.T) {
 	chunkPool.reserve(1)
 	ac := BindNew()
 	defer ac.Release()
 
-	var s, e runtime.MemStats
-	runtime.ReadMemStats(&s)
-	item := NewCopy(ac, &PbItem{})
-	runtime.ReadMemStats(&e)
-	if e.Mallocs-s.Mallocs > 0 {
-		b.Fail()
-	}
+	var r *PbItem
+	NoMalloc(func() {
+		r = NewCopy(ac, &PbItem{})
+		//r = new(PbItem)
+	})
+	runtime.KeepAlive(r)
+}
 
-	runtime.KeepAlive(item)
+func TestLinearAllocator_Alignment(t *testing.T) {
+	ac := Get()
+	defer ac.Release()
+
+	for i := 0; i < 1024; i++ {
+		p := ac.alloc(i, false)
+		if (uintptr(p) & uintptr(PtrSize-1)) != 0 {
+			t.Fail()
+		}
+	}
 }

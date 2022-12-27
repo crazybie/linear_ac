@@ -21,7 +21,7 @@ import (
 // 2. generate a recoverable panic.
 const nonNilPanicableAddr = uintptr(1)
 
-func (ac *Allocator) internalPointer(addr uintptr, checkExternals bool) bool {
+func (ac *Allocator) internalPointer(addr uintptr) bool {
 
 	if addr == 0 || addr == nonNilPanicableAddr {
 		return true
@@ -37,11 +37,10 @@ func (ac *Allocator) internalPointer(addr uintptr, checkExternals bool) bool {
 			return true
 		}
 	}
-	if checkExternals {
-		for _, c := range ac.externals {
-			if data(c) == unsafe.Pointer(addr) {
-				return true
-			}
+
+	for _, c := range ac.externalPtr {
+		if c == unsafe.Pointer(addr) {
+			return true
 		}
 	}
 	return false
@@ -51,8 +50,8 @@ func (ac *Allocator) internalPointer(addr uintptr, checkExternals bool) bool {
 func (ac *Allocator) debugCheck(invalidatePointers bool) {
 	checked := map[interface{}]struct{}{}
 	// reverse order to bypass obfuscated pointers
-	for i := len(ac.scanObjs) - 1; i >= 0; i-- {
-		ptr := ac.scanObjs[i]
+	for i := len(ac.dbgScanObjs) - 1; i >= 0; i-- {
+		ptr := ac.dbgScanObjs[i]
 		if _, ok := checked[ptr]; ok {
 			continue
 		}
@@ -71,7 +70,7 @@ func (ac *Allocator) CheckExternalPointers() {
 func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}]struct{}, invalidatePointers bool) error {
 	if val.Kind() == reflect.Ptr {
 		if val.Pointer() != nonNilPanicableAddr && !val.IsNil() {
-			if !ac.internalPointer(val.Pointer(), true) {
+			if !ac.internalPointer(val.Pointer()) {
 				return fmt.Errorf("unexpected external pointer: %+v", val)
 			}
 
@@ -113,13 +112,13 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 				h := (*sliceHeader)(unsafe.Pointer(f.UnsafeAddr()))
 				if f.Len() > 0 && h.Data != nil {
 					found := false
-					for _, i := range ac.externals {
-						if (*sliceHeader)(data(i)).Data == h.Data {
+					for _, i := range ac.externalSlice {
+						if i == h.Data {
 							found = true
 							break
 						}
 					}
-					if !found && !ac.internalPointer((uintptr)(h.Data), false) {
+					if !found && !ac.internalPointer((uintptr)(h.Data)) {
 						return fmt.Errorf("%s: unexpected external slice: %s", fieldName(i), f.String())
 					}
 					for j := 0; j < f.Len(); j++ {
@@ -144,7 +143,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 			case reflect.Map:
 				m := *(*unsafe.Pointer)(unsafe.Pointer(f.UnsafeAddr()))
 				found := false
-				for _, i := range ac.externals {
+				for _, i := range ac.externalMap {
 					if data(i) == m {
 						found = true
 						break

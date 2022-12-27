@@ -120,6 +120,7 @@ func forceStackSplit(i int) int {
 	return i
 }
 
+// noEscape is to cheat the escape analyser to avoid heap alloc.
 //go:noinline
 //go:nosplit
 func noEscape(p interface{}) (ret interface{}) {

@@ -188,8 +188,17 @@ func NewMap[K comparable, V any](ac *Allocator) map[K]V {
 	return r
 }
 
-// ExternalPtr stores the pointer on the function stack to prevent the gc sweep it.
-func ExternalPtr[T any](ac *Allocator, ptr T) T {
+func AttachExternalPtr[T any](ac *Allocator, ptr *T) *T {
 	ac.keepAlive(ptr)
 	return ptr
+}
+
+func AttachExternalSlice[T any](ac *Allocator, s []T) []T {
+	ac.keepAlive(s)
+	return s
+}
+
+func AttachExternalMap[K comparable, V any](ac *Allocator, m map[K]V) map[K]V {
+	ac.keepAlive(m)
+	return m
 }
