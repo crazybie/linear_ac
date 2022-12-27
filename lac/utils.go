@@ -21,8 +21,6 @@ import (
 )
 
 var (
-	ptrSize = int(unsafe.Sizeof(uintptr(0)))
-
 	boolPtrType = reflect.TypeOf((*bool)(nil))
 	intPtrType  = reflect.TypeOf((*int)(nil))
 	i32PtrType  = reflect.TypeOf((*int32)(nil))
@@ -72,10 +70,10 @@ func reflect_memmove(to, from unsafe.Pointer, n uintptr)
 
 var goRoutineIdOffset uint64 = 0
 
-func goRoutinePtr() uint64
+func goRoutinePtr() unsafe.Pointer
 
 func goRoutineId() uint64 {
-	data := (*[32]uint64)(unsafe.Pointer(uintptr(goRoutinePtr())))
+	data := (*[32]uint64)(goRoutinePtr())
 	if offset := atomic.LoadUint64(&goRoutineIdOffset); offset != 0 {
 		return data[int(offset)]
 	}
