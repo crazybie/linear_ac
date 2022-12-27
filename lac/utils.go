@@ -124,9 +124,8 @@ func forceStackSplit(i int) int {
 //go:noinline
 //go:nosplit
 func noEscape(p interface{}) (ret interface{}) {
-	r := *(*[2]uintptr)(unsafe.Pointer(&p))
 	//forceStackSplit(1000)
-	*(*[2]uintptr)(unsafe.Pointer(&ret)) = r
+	*(*[2]uintptr)(unsafe.Pointer(&ret)) = *(*[2]uintptr)(unsafe.Pointer(&p))
 	return
 }
 

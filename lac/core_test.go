@@ -37,13 +37,6 @@ type PbData struct {
 	InUse *PbItem
 }
 
-func Test_GoRoutineId(t *testing.T) {
-	id := goRoutineId()
-	if id != goRoutineIdSlow() {
-		t.Fail()
-	}
-}
-
 func Test_LinearAlloc(t *testing.T) {
 	ac := BindNew()
 	d := New[PbData](ac)
