@@ -11,11 +11,8 @@ package lac
 
 import (
 	"fmt"
-	"math/rand"
 	"runtime"
-	"sync"
 	"testing"
-	"time"
 )
 
 type EnumA int32
@@ -267,50 +264,6 @@ func TestBuildInAllocator_All(t *testing.T) {
 	v := NewEnum(ac, e)
 	if *v != e {
 		t.Fail()
-	}
-	ac.Release()
-}
-
-func TestBindAc(t *testing.T) {
-	useAc := func() *Allocator {
-		return BindGet()
-	}
-
-	wg := sync.WaitGroup{}
-	for i := 0; i < 1000; i++ {
-		go func() {
-			wg.Add(1)
-
-			ac := BindNew()
-			defer ac.Release()
-
-			time.Sleep(time.Duration(rand.Float32()*1000) * time.Millisecond)
-
-			if useAc() != ac {
-				t.Fail()
-			}
-			wg.Done()
-		}()
-	}
-	wg.Wait()
-}
-
-func TestLinearAllocator_NewExternalPtr(b *testing.T) {
-	ac := BindNew()
-	type D struct {
-		d [10]*int
-	}
-	d := New[D](ac)
-	for i := 0; i < len(d.d); i++ {
-		d.d[i] = AttachExternal(ac, new(int))
-		//d.d[i] = new(int)
-		*d.d[i] = i
-		runtime.GC()
-	}
-	for i := 0; i < len(d.d); i++ {
-		if *d.d[i] != i {
-			b.Errorf("should not be gced.")
-		}
 	}
 	ac.Release()
 }

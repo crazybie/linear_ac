@@ -182,6 +182,11 @@ func NewSlice[T any](ac *Allocator, len, cap int) []T {
 	return r
 }
 
+func Append[T any](ac *Allocator, s []T, v T) []T {
+	ac.SliceAppend(&s, v)
+	return s
+}
+
 func NewMap[K comparable, V any](ac *Allocator) map[K]V {
 	var r map[K]V
 	ac.NewMap(&r)
