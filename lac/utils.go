@@ -105,18 +105,12 @@ func goRoutineIdSlow() uint64 {
 	}
 }
 
-// Helpers
+//============================================================================
+// pointer helpers
+//============================================================================
 
 func add(p unsafe.Pointer, offset int) unsafe.Pointer {
 	return unsafe.Pointer(uintptr(p) + uintptr(offset))
-}
-
-//go:noinline
-func forceStackSplit(i int) int {
-	if i > 0 {
-		return forceStackSplit(i - 1)
-	}
-	return i
 }
 
 // noEscape is to cheat the escape analyser to avoid heap alloc.
@@ -124,7 +118,6 @@ func forceStackSplit(i int) int {
 //go:noinline
 //go:nosplit
 func noEscape(p interface{}) (ret interface{}) {
-	//forceStackSplit(1000)
 	*(*[2]uintptr)(unsafe.Pointer(&ret)) = *(*[2]uintptr)(unsafe.Pointer(&p))
 	return
 }
