@@ -50,10 +50,11 @@ func init() {
 // Allocator
 
 type Allocator struct {
-	disabled    bool
+	disabled bool
+	sync.Mutex
 	chunks      []*chunk
 	curChunk    int
-	refCnt      int
+	refCnt      int32
 	dbgScanObjs []interface{}
 
 	externalPtr   []unsafe.Pointer
@@ -139,6 +140,12 @@ func (ac *Allocator) typedNew(ptrTp reflect.Type, zero bool) (ret interface{}) {
 }
 
 func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
+	// shared with other goroutines?
+	if ac.refCnt > 1 {
+		ac.Lock()
+		defer ac.Unlock()
+	}
+
 	if len(ac.chunks) == 0 {
 		ac.chunks = append(ac.chunks, chunkPool.get())
 	}

@@ -12,6 +12,7 @@ package lac
 import (
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -59,12 +60,11 @@ func (ac *Allocator) Release() {
 }
 
 func (ac *Allocator) IncRef() {
-	ac.refCnt++
+	atomic.AddInt32(&ac.refCnt, 1)
 }
 
 func (ac *Allocator) DecRef() {
-	ac.refCnt--
-	if ac.refCnt <= 0 {
+	if atomic.AddInt32(&ac.refCnt, -1) <= 0 {
 		ac.Release()
 	}
 }

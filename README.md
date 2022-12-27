@@ -4,23 +4,34 @@
 ## Goal
 Speed up the memory allocation and improve the GC performance, especially for dynamic-memory-heavy applications.
 
+NOTE: current version need go1.18+.
+
 ## Potential UseCases
 1. A large amount of memory never needs to be released. (global configs, read-only assets like navmesh)
 2. Massive temporary objects with deterministic lifetime. (protobuf objects send to network)
 
-## Advantages over pool
+
+# Pros than v1.20 Arena
+1. much faster on allocating(see benchmark results below), gc marking and sweeping.
+2. support concurrency.
+3. support debugging mode.
+
+
+## Highlights
 Linear allocator:
 
 1. Can greatly reduce the object scanning pressure of GC. Linear allocator is just a few byte arrays internally, but pool is normal container always need to be scanned fully.
 2. More general. Linear allocator can allocate various types of objects.
 3. Much simpler and faster on reclaiming memories. No need to manually release every object back but just reset the allocation cursor.
 4. Much cheaper. Linear allocators reuse memory chunks among each other via chunk pool. 
-5. Memory efficient. Memories are more compact, CPU cache-friendly. 
+5. Memory efficient. Memories are more compact, CPU cache-friendly.
+6. Allows build-in allocated objects to be attached to the lac allocated objects. 
+7. Support concurrency.
+
 
 ## Limitations
-1. Don't store the pointers of build-in allocated objects into linear allocated objects. (There's a debug mode for checking external pointers)
+1. Don't store the pointers of build-in allocated objects into linear allocated objects directly. (There's a debug mode for checking external pointers)
 2. Don't store and use the pointers of linear allocated objects after the allocator is reset or released. (In debug mode, the allocator traverses the objects and obfuscate the pointers to make any attempting usage panic)
-3. Not support concurrency. 
 
 
 ## Usage
@@ -41,19 +52,16 @@ type PbData struct {
 }
 
 
-func main() {
-	
-	ac := linear_ac.Get()
+func main() {	
+	ac := lac.Get()
 	defer ac.Release()
 	
-	var d *PbData
-	ac.New(&d)
+	d := lac.New[PbData](ac)
 	d.Age = ac.Int(11)
 
 	n := 3
 	for i := 0; i < n; i++ {
-		var item *PbItem
-		ac.New(&item)
+		item := lac.New[PbItem](ac)
 		item.Id = ac.Int(i + 1)
 		item.Active = ac.Bool(true)
 		item.Price = ac.Int(100 + i)
