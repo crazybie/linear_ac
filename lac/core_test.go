@@ -38,7 +38,9 @@ type PbData struct {
 }
 
 func Test_LinearAlloc(t *testing.T) {
-	ac := BindNew()
+	ac := Get()
+	defer ac.Release()
+
 	d := New[PbData](ac)
 	d.Age = ac.Int(11)
 
@@ -52,6 +54,7 @@ func Test_LinearAlloc(t *testing.T) {
 		item.Name = ac.String("name")
 
 		ac.SliceAppend(&d.Items, item)
+		//d.Items = Append(ac, d.Items, item)
 	}
 
 	if *d.Age != 11 {
@@ -72,12 +75,11 @@ func Test_LinearAlloc(t *testing.T) {
 			t.Errorf("item.class")
 		}
 	}
-	ac.reset()
-	ac.Release()
 }
 
 func Test_String(t *testing.T) {
-	ac := BindNew()
+	ac := Get()
+	defer ac.Release()
 
 	type D struct {
 		s [5]*string
@@ -92,11 +94,11 @@ func Test_String(t *testing.T) {
 			t.Errorf("elem %v is gced", i)
 		}
 	}
-	ac.Release()
 }
 
 func TestLinearAllocator_NewMap(t *testing.T) {
-	ac := BindNew()
+	ac := Get()
+	defer ac.Release()
 
 	type D struct {
 		m map[int]*int
@@ -114,12 +116,13 @@ func TestLinearAllocator_NewMap(t *testing.T) {
 			t.Fail()
 		}
 	}
-	ac.Release()
 }
 
 func TestLinearAllocator_NewSlice(t *testing.T) {
 	DbgMode = true
-	ac := BindNew()
+	ac := Get()
+	defer ac.Release()
+
 	s := make([]*int, 0)
 	ac.SliceAppend(&s, ac.Int(2))
 	if len(s) != 1 && *s[0] != 2 {
@@ -189,11 +192,12 @@ func TestLinearAllocator_NewSlice(t *testing.T) {
 		}
 	}
 
-	ac.Release()
 }
 
 func TestLinearAllocator_NewCopy(b *testing.T) {
-	ac := BindNew()
+	ac := Get()
+	defer ac.Release()
+
 	for i := 0; i < 3; i++ {
 		d := NewCopy(ac, &PbItem{
 			Id:    ac.Int(1 + i),
@@ -215,21 +219,23 @@ func TestLinearAllocator_NewCopy(b *testing.T) {
 			b.Fail()
 		}
 	}
-	ac.Release()
 }
 
 func TestAllocator_Enum(t *testing.T) {
-	ac := BindNew()
+	ac := Get()
+	defer ac.Release()
+
 	e := EnumVal2
 	v := NewEnum(ac, e)
 	if *v != e {
 		t.Fail()
 	}
-	ac.Release()
 }
 
 func TestBuildInAllocator_All(t *testing.T) {
 	ac := BuildInAc
+	defer ac.Release()
+
 	item := New[PbItem](ac)
 	item.Id = ac.Int(11)
 	if *item.Id != 11 {
@@ -258,12 +264,11 @@ func TestBuildInAllocator_All(t *testing.T) {
 	if *v != e {
 		t.Fail()
 	}
-	ac.Release()
 }
 
 func TestLinearAllocator_NewCopyNoAlloc(b *testing.T) {
 	chunkPool.reserve(1)
-	ac := BindNew()
+	ac := Get()
 	defer ac.Release()
 
 	var r *PbItem
@@ -283,5 +288,22 @@ func TestLinearAllocator_Alignment(t *testing.T) {
 		if (uintptr(p) & uintptr(PtrSize-1)) != 0 {
 			t.Fail()
 		}
+	}
+}
+
+func Test_SliceAppendValue(t *testing.T) {
+	ac := Get()
+	defer ac.Release()
+
+	type S struct {
+		a int
+		b float32
+		c string
+	}
+
+	var s []S
+	ac.SliceAppend(&s, S{1, 2, "3"})
+	if s[0].a != 1 || s[0].b != 2 || s[0].c != "3" {
+		t.Fail()
 	}
 }

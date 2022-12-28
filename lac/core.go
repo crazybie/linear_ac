@@ -17,12 +17,10 @@ import (
 	"unsafe"
 )
 
-const PtrSize = int(unsafe.Sizeof(uintptr(0)))
-
 var (
 	DbgMode         = false
 	DisableLinearAc = false
-	ChunkSize       = 1024 * 32
+	ChunkSize       = 1024 * 8
 )
 
 // Chunk
@@ -50,8 +48,9 @@ func init() {
 // Allocator
 
 type Allocator struct {
-	disabled bool
 	sync.Mutex
+
+	disabled    bool
 	chunks      []*chunk
 	curChunk    int
 	refCnt      int32
@@ -80,6 +79,7 @@ func (ac *Allocator) keepAlive(ptr interface{}) {
 	if d == nil {
 		return
 	}
+
 	switch reflect.TypeOf(ptr).Kind() {
 	case reflect.Ptr:
 		ac.externalPtr = append(ac.externalPtr, d)
@@ -127,15 +127,19 @@ func (ac *Allocator) reset() {
 	ac.refCnt = 1
 }
 
-func (ac *Allocator) typedNew(ptrTp reflect.Type, zero bool) (ret interface{}) {
-	objType := ptrTp.Elem()
-	ptr := ac.alloc(int(objType.Size()), zero)
+func (ac *Allocator) typedNew(ptrTp reflect.Type, sz uintptr, zero bool) (ret interface{}) {
+	if sz == 0 {
+		sz = ptrTp.Elem().Size()
+	}
+	ptr := ac.alloc(int(sz), zero)
 	*(*emptyInterface)(unsafe.Pointer(&ret)) = emptyInterface{data(ptrTp), ptr}
+
 	if DbgMode {
-		if objType.Kind() == reflect.Struct {
+		if ptrTp.Elem().Kind() == reflect.Struct {
 			ac.dbgScanObjs = append(ac.dbgScanObjs, ret)
 		}
 	}
+
 	return
 }
 
@@ -149,10 +153,13 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 	if len(ac.chunks) == 0 {
 		ac.chunks = append(ac.chunks, chunkPool.get())
 	}
+
 	aligned := (need + PtrSize + 1) & ^(PtrSize - 1)
+
 start:
 	cur := ac.chunks[ac.curChunk]
 	used := len(*cur)
+
 	if used+aligned > cap(*cur) {
 		if ac.curChunk == len(ac.chunks)-1 {
 			var ck *chunk
@@ -168,13 +175,15 @@ start:
 			ck := make(chunk, 0, aligned)
 			ac.chunks[ac.curChunk+1] = &ck
 		}
+
 		ac.curChunk++
 		goto start
 	}
+
 	*cur = (*cur)[:used+aligned]
-	ptr := add((*sliceHeader)(unsafe.Pointer(cur)).Data, used)
+	ptr := unsafe.Add((*sliceHeader)(unsafe.Pointer(cur)).Data, used)
 	if zero {
-		clearBytes(ptr, aligned)
+		memclrNoHeapPointers(ptr, uintptr(aligned))
 	}
 	return ptr
 }
@@ -189,13 +198,12 @@ func (ac *Allocator) New(ptrToPtr interface{}) {
 	}
 
 	tp := reflect.TypeOf(tmp).Elem()
-	v := ac.typedNew(tp, true)
+	v := ac.typedNew(tp, 0, true)
 	reflect.ValueOf(tmp).Elem().Set(reflect.ValueOf(v))
 }
 
 // NewCopy is useful for code migration.
-// native mode is slower than new() due to the additional memory move from stack to heap,
-// this is on purpose to avoid heap alloc in linear mode.
+// it is slower than New() due to the additional memory move from stack to heap.
 func (ac *Allocator) NewCopy(ptr interface{}) (ret interface{}) {
 	ptrTemp := noEscape(ptr)
 	ptrType := reflect.TypeOf(ptrTemp)
@@ -203,10 +211,10 @@ func (ac *Allocator) NewCopy(ptr interface{}) (ret interface{}) {
 
 	if ac.disabled {
 		ret = reflect.New(tp).Interface()
-		reflect_typedmemmove(data(tp), data(ret), data(ptrTemp))
+		typedmemmove(data(tp), data(ret), data(ptrTemp))
 	} else {
-		ret = ac.typedNew(ptrType, false)
-		copyBytes(data(ptrTemp), data(ret), int(tp.Size()))
+		ret = ac.typedNew(ptrType, 0, false)
+		memmove(data(ret), data(ptrTemp), tp.Size())
 	}
 	return
 }
@@ -217,7 +225,7 @@ func (ac *Allocator) NewString(v string) string {
 	}
 	h := (*stringHeader)(unsafe.Pointer(&v))
 	ptr := ac.alloc(h.Len, false)
-	copyBytes(h.Data, ptr, h.Len)
+	memmove(ptr, h.Data, uintptr(h.Len))
 	h.Data = ptr
 	return v
 }
@@ -285,7 +293,7 @@ func (ac *Allocator) CopySlice(slice interface{}) (ret interface{}) {
 	header := (*sliceHeader)(data(sliceTmp))
 	size := int(elemType.Size()) * header.Len
 	dst := ac.alloc(size, false)
-	copyBytes(header.Data, dst, size)
+	memmove(dst, header.Data, uintptr(size))
 	header.Data = dst
 
 	runtime.KeepAlive(slice)
@@ -293,7 +301,7 @@ func (ac *Allocator) CopySlice(slice interface{}) (ret interface{}) {
 }
 
 // SliceAppend with no malloc.
-// NOTE: the generic version has weird malloc thus not provided.
+// NOTE: the generic version has weird malloc thus not preferred in extreme case.
 func (ac *Allocator) SliceAppend(slicePtr interface{}, elem interface{}) {
 	slicePtrTmp := noEscape(slicePtr)
 
@@ -308,40 +316,39 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, elem interface{}) {
 	if slicePtrTp.Kind() != reflect.Ptr || slicePtrTp.Elem().Kind() != reflect.Slice {
 		panic("expect pointer to slice")
 	}
-	inputElemTp := reflect.TypeOf(elem)
 	sliceElemTp := slicePtrTp.Elem().Elem()
+
+	inputElemTp := reflect.TypeOf(elem)
 	if sliceElemTp != inputElemTp && elem != nil {
 		panic("elem type not match with slice")
 	}
 
 	header := (*sliceHeader)(data(slicePtrTmp))
-	elemSz := int(sliceElemTp.Size())
+	ptr := data(elem)
+	if sliceElemTp.Kind() == reflect.Ptr {
+		u := uintptr(ptr)
+		ptr = unsafe.Pointer(&u)
+	}
+	ac.sliceAppend(header, ptr, int(sliceElemTp.Size()))
+}
 
+func (ac *Allocator) sliceAppend(s *sliceHeader, elemPtr unsafe.Pointer, elemSz int) {
 	// grow
-	if header.Len >= header.Cap {
-		pre := *header
-		if header.Cap >= 16 {
-			header.Cap = int(float32(header.Cap) * 1.5)
-		} else {
-			header.Cap *= 2
+	if s.Len >= s.Cap {
+		pre := *s
+		s.Cap *= 2
+		if s.Cap == 0 {
+			s.Cap = 4
 		}
-		if header.Cap == 0 {
-			header.Cap = 1
-		}
-		header.Data = ac.alloc(header.Cap*elemSz, false)
-		copyBytes(pre.Data, header.Data, pre.Len*elemSz)
+		s.Data = ac.alloc(s.Cap*elemSz, false)
+		memmove(s.Data, pre.Data, uintptr(pre.Len*elemSz))
 	}
 
 	// append
-	if header.Len < header.Cap {
-		elemData := data(elem)
-		dst := add(header.Data, elemSz*header.Len)
-		if sliceElemTp.Kind() == reflect.Ptr {
-			*(*unsafe.Pointer)(dst) = elemData
-		} else {
-			copyBytes(elemData, dst, elemSz)
-		}
-		header.Len++
+	if s.Len < s.Cap {
+		dst := unsafe.Add(s.Data, elemSz*s.Len)
+		memmove(dst, elemPtr, uintptr(elemSz))
+		s.Len++
 	}
 }
 
@@ -353,7 +360,7 @@ func (ac *Allocator) Enum(e interface{}) interface{} {
 		return r.Interface()
 	}
 	tp := reflect.TypeOf(temp)
-	r := ac.typedNew(reflect.PtrTo(tp), false)
-	copyBytes(data(temp), data(r), int(tp.Size()))
+	r := ac.typedNew(reflect.PtrTo(tp), 0, false)
+	memmove(data(r), data(temp), tp.Size())
 	return r
 }

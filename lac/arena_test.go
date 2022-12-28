@@ -128,35 +128,36 @@ func makeDataArena(ac *arena.Arena, i int) *PbDataEx {
 func Benchmark_LacMallocLarge(t *testing.B) {
 	DbgMode = false
 	runtime.GC()
-	t.StartTimer()
+	ac := Get()
 
-	ac := BindNew()
+	t.StartTimer()
 	for i := 0; i < t.N; i++ {
 		_ = makeDataAc(ac, i)
 	}
-	ac.Release()
+	t.StartTimer()
 
+	ac.Release()
 	acPool.clear()
 	chunkPool.clear()
 }
 
 func Benchmark_ArenaMallocLarge(t *testing.B) {
 	runtime.GC()
-	t.StartTimer()
-
 	ac := arena.NewArena()
+	t.StartTimer()
 	for i := 0; i < t.N; i++ {
 		_ = makeDataArena(ac, i)
 	}
+	t.StopTimer()
 	ac.Free()
 }
 
 func Benchmark_LacMallocSmall(t *testing.B) {
 	DbgMode = false
 	runtime.GC()
-	t.StartTimer()
+	ac := Get()
 
-	ac := BindNew()
+	t.StartTimer()
 	for i := 0; i < t.N; i++ {
 		e := New[PbItem](ac)
 		e.Name = ac.String("a")
@@ -164,14 +165,15 @@ func Benchmark_LacMallocSmall(t *testing.B) {
 		e.Id = ac.Int(2)
 		e.Active = ac.Bool(true)
 	}
+	t.StopTimer()
 	ac.Release()
 }
 
 func Benchmark_ArenaMallocSmall(t *testing.B) {
 	runtime.GC()
-	t.StartTimer()
-
 	ac := arena.NewArena()
+
+	t.StartTimer()
 	for i := 0; i < t.N; i++ {
 		e := arena.New[PbItem](ac)
 		e.Name = arena.New[string](ac)
@@ -183,5 +185,7 @@ func Benchmark_ArenaMallocSmall(t *testing.B) {
 		e.Active = arena.New[bool](ac)
 		*e.Active = true
 	}
+	t.StopTimer()
+
 	ac.Free()
 }

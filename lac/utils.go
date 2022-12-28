@@ -32,6 +32,8 @@ var (
 	strPtrType  = reflect.TypeOf((*string)(nil))
 )
 
+const PtrSize = int(unsafe.Sizeof(uintptr(0)))
+
 type sliceHeader struct {
 	Data unsafe.Pointer
 	Len  int
@@ -53,14 +55,14 @@ type reflectedValue struct {
 	Ptr  unsafe.Pointer
 }
 
-//go:linkname reflect_typedmemmove reflect.typedmemmove
-func reflect_typedmemmove(typ, dst, src unsafe.Pointer)
+//go:linkname typedmemmove reflect.typedmemmove
+func typedmemmove(typ, dst, src unsafe.Pointer)
 
-//go:linkname reflect_memclrNoHeapPointers reflect.memclrNoHeapPointers
-func reflect_memclrNoHeapPointers(ptr unsafe.Pointer, n uintptr)
+//go:linkname memclrNoHeapPointers reflect.memclrNoHeapPointers
+func memclrNoHeapPointers(ptr unsafe.Pointer, n uintptr)
 
-//go:linkname reflect_memmove reflect.memmove
-func reflect_memmove(to, from unsafe.Pointer, n uintptr)
+//go:linkname memmove reflect.memmove
+func memmove(to, from unsafe.Pointer, n uintptr)
 
 //============================================================================
 // GoroutineId
@@ -109,10 +111,6 @@ func goRoutineIdSlow() uint64 {
 // pointer helpers
 //============================================================================
 
-func add(p unsafe.Pointer, offset int) unsafe.Pointer {
-	return unsafe.Pointer(uintptr(p) + uintptr(offset))
-}
-
 // noEscape is to cheat the escape analyser to avoid heap alloc.
 //
 //go:noinline
@@ -132,14 +130,6 @@ func interfaceOfUnexported(v reflect.Value) (ret interface{}) {
 	r.Type = v2.Type
 	r.Data = v2.Ptr
 	return
-}
-
-func copyBytes(src, dst unsafe.Pointer, len int) {
-	reflect_memmove(dst, src, uintptr(len))
-}
-
-func clearBytes(dst unsafe.Pointer, len int) {
-	reflect_memclrNoHeapPointers(dst, uintptr(len))
 }
 
 func noMalloc(f func()) {
