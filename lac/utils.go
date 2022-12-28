@@ -55,9 +55,6 @@ type reflectedValue struct {
 	Ptr  unsafe.Pointer
 }
 
-//go:linkname typedmemmove reflect.typedmemmove
-func typedmemmove(typ, dst, src unsafe.Pointer)
-
 //go:linkname memclrNoHeapPointers reflect.memclrNoHeapPointers
 func memclrNoHeapPointers(ptr unsafe.Pointer, n uintptr)
 

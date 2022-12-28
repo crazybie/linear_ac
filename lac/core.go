@@ -202,16 +202,15 @@ func (ac *Allocator) New(ptrToPtr interface{}) {
 	reflect.ValueOf(tmp).Elem().Set(reflect.ValueOf(v))
 }
 
-// NewCopy is useful for code migration.
-// it is slower than New() due to the additional memory move from stack to heap.
-func (ac *Allocator) NewCopy(ptr interface{}) (ret interface{}) {
-	ptrTemp := noEscape(ptr)
+// NewFrom is useful for code migration.
+// it is a bit slower than New() due to the src object construction and additional memory move from stack to heap.
+func (ac *Allocator) NewFrom(src interface{}) (ret interface{}) {
+	ptrTemp := noEscape(src)
 	ptrType := reflect.TypeOf(ptrTemp)
 	tp := ptrType.Elem()
 
 	if ac.disabled {
-		ret = reflect.New(tp).Interface()
-		typedmemmove(data(tp), data(ret), data(ptrTemp))
+		return ptrTemp
 	} else {
 		ret = ac.typedNew(ptrType, 0, false)
 		memmove(data(ret), data(ptrTemp), tp.Size())

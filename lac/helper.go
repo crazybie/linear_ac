@@ -168,8 +168,8 @@ func New[T any](ac *Allocator) *T {
 	return ac.typedNew(reflect.TypeOf((*T)(nil)), 0, true).(*T)
 }
 
-func NewCopy[T any](ac *Allocator, from *T) *T {
-	return ac.NewCopy(from).(*T)
+func NewFrom[T any](ac *Allocator, from *T) *T {
+	return ac.NewFrom(from).(*T)
 }
 
 func NewEnum[T any](ac *Allocator, e T) *T {

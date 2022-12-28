@@ -199,7 +199,7 @@ func TestLinearAllocator_NewCopy(b *testing.T) {
 	defer ac.Release()
 
 	for i := 0; i < 3; i++ {
-		d := NewCopy(ac, &PbItem{
+		d := NewFrom(ac, &PbItem{
 			Id:    ac.Int(1 + i),
 			Class: ac.Int(2 + i),
 			Price: ac.Int(3 + i),
@@ -242,7 +242,7 @@ func TestBuildInAllocator_All(t *testing.T) {
 		t.Fail()
 	}
 	id2 := 22
-	item = NewCopy(ac, &PbItem{Id: &id2})
+	item = NewFrom(ac, &PbItem{Id: &id2})
 	if *item.Id != 22 {
 		t.Fail()
 	}
@@ -273,7 +273,7 @@ func TestLinearAllocator_NewCopyNoAlloc(b *testing.T) {
 
 	var r *PbItem
 	noMalloc(func() {
-		r = NewCopy(ac, &PbItem{})
+		r = NewFrom(ac, &PbItem{})
 		//r = new(PbItem)
 	})
 	runtime.KeepAlive(r)
