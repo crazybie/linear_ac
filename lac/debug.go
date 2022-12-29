@@ -112,6 +112,12 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 			f := val.Field(i)
 
 			switch f.Kind() {
+			case reflect.Bool,
+				reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+				reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+				reflect.Float32, reflect.Float64:
+				// no need to check.
+
 			case reflect.Ptr:
 				if err := ac.checkRecursively(f, checked, invalidatePointers); err != nil {
 					return fmt.Errorf("%v: %v", fieldName(i), err)
@@ -121,16 +127,16 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 				}
 
 			case reflect.Slice:
-				h := (*reflect.SliceHeader)(unsafe.Pointer(f.UnsafeAddr()))
-				if f.Len() > 0 && h.Data != 0 {
+				h := (*sliceHeader)(unsafe.Pointer(f.UnsafeAddr()))
+				if f.Len() > 0 && h.Data != nil {
 					found := false
 					for _, i := range ac.externalSlice {
-						if i == unsafe.Pointer(h.Data) {
+						if i == h.Data {
 							found = true
 							break
 						}
 					}
-					if !found && !ac.internalPointer(h.Data) {
+					if !found && !ac.internalPointer(uintptr(h.Data)) {
 						return fmt.Errorf("%s: unexpected external slice: %s", fieldName(i), f.String())
 					}
 					for j := 0; j < f.Len(); j++ {
@@ -140,7 +146,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 					}
 				}
 				if invalidatePointers {
-					h.Data = 0
+					h.Data = nil
 					h.Len = math.MaxInt32
 					h.Cap = math.MaxInt32
 				}
@@ -169,6 +175,43 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 						return fmt.Errorf("%v: %v", fieldName(i), err)
 					}
 				}
+
+			case reflect.String:
+				h := (*stringHeader)(unsafe.Pointer(f.UnsafeAddr()))
+				if f.Len() > 0 && h.Data != nil {
+					found := false
+					for _, i := range ac.externalString {
+						if i == h.Data {
+							found = true
+							break
+						}
+					}
+					if !found && !ac.internalPointer(uintptr(h.Data)) {
+						return fmt.Errorf("%s: unexpected external string: %s", fieldName(i), f.String())
+					}
+				}
+				if invalidatePointers {
+					h.Data = nil
+					h.Len = math.MaxInt32
+				}
+
+			case reflect.Func:
+				p := f.UnsafePointer()
+				if p != nil {
+					found := false
+					for _, i := range ac.externalPtr {
+						if i == p {
+							found = true
+							break
+						}
+					}
+					if !found {
+						return fmt.Errorf("%s: unexpected external func: %s", fieldName(i), f.String())
+					}
+				}
+
+			default:
+				return fmt.Errorf("unsupported type: %v, %v", fieldName(i), f.String())
 			}
 		}
 	}

@@ -10,7 +10,6 @@
 package lac
 
 import (
-	"fmt"
 	"reflect"
 	"sync"
 	"unsafe"
@@ -37,13 +36,14 @@ var chunkPool = Pool[chunk]{
 type Allocator struct {
 	sync.Mutex
 
-	disabled      bool
-	chunks        []chunk
-	curChunk      int
-	refCnt        int32
-	externalPtr   []unsafe.Pointer
-	externalSlice []unsafe.Pointer
-	externalMap   []interface{}
+	disabled       bool
+	chunks         []chunk
+	curChunk       int
+	refCnt         int32
+	externalPtr    []unsafe.Pointer
+	externalSlice  []unsafe.Pointer
+	externalString []unsafe.Pointer
+	externalMap    []interface{}
 
 	dbgScanObjs []interface{}
 }
@@ -176,9 +176,11 @@ func (ac *Allocator) keepAlive(ptr interface{}) {
 		ac.externalPtr = append(ac.externalPtr, d)
 	case reflect.Slice:
 		ac.externalSlice = append(ac.externalSlice, (*sliceHeader)(d).Data)
+	case reflect.String:
+		ac.externalString = append(ac.externalSlice, (*stringHeader)(d).Data)
 	case reflect.Map:
 		ac.externalMap = append(ac.externalMap, d)
-	default:
-		panic(fmt.Errorf("unsupported type %v", reflect.TypeOf(ptr).String()))
+	case reflect.Func:
+		ac.externalPtr = append(ac.externalPtr, reflect.ValueOf(ptr).UnsafePointer())
 	}
 }

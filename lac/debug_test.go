@@ -245,3 +245,46 @@ func Test_LacAsField(t *testing.T) {
 	s := New[S](ac)
 	s.ac = ac
 }
+
+func Test_ClosureAsField(t *testing.T) {
+	DbgMode = true
+	ac := Get()
+	defer ac.Release()
+
+	type S struct {
+		c func() any
+	}
+
+	s := New[S](ac)
+	s.c = AttachExternal(ac, func() any {
+		return s
+	})
+
+	runtime.GC()
+
+	if s.c() != s {
+		t.Fail()
+	}
+}
+
+func Test_ExternalClosure(t *testing.T) {
+	DbgMode = true
+	ac := Get()
+
+	type S struct {
+		c func() any
+	}
+
+	s := New[S](ac)
+	s.c = func() any {
+		return s
+	}
+
+	defer func() {
+		if e := recover(); e == nil {
+			t.Errorf("should report unexported ptr")
+		}
+	}()
+
+	ac.Release()
+}
