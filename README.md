@@ -31,7 +31,7 @@ Linear allocator:
 
 
 # Pros over v1.20 arena
-1. Much faster on allocating(see benchmark results below), gc marking and sweeping.
+1. Faster(see benchmark results below).
 2. Support concurrency.
 3. Slice append can utilize Lac as well.
 4. Support debugging mode.
