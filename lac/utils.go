@@ -13,10 +13,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
-	"strconv"
-	"strings"
 	"sync"
-	"sync/atomic"
 	"unsafe"
 )
 
@@ -34,17 +31,6 @@ var (
 
 const PtrSize = int(unsafe.Sizeof(uintptr(0)))
 
-type sliceHeader struct {
-	Data unsafe.Pointer
-	Len  int
-	Cap  int
-}
-
-type stringHeader struct {
-	Data unsafe.Pointer
-	Len  int
-}
-
 type emptyInterface struct {
 	Type unsafe.Pointer
 	Data unsafe.Pointer
@@ -60,53 +46,6 @@ func memclrNoHeapPointers(ptr unsafe.Pointer, n uintptr)
 
 //go:linkname memmove reflect.memmove
 func memmove(to, from unsafe.Pointer, n uintptr)
-
-//============================================================================
-// GoroutineId
-//============================================================================
-
-// https://notes.volution.ro/v1/2019/08/notes/23e3644e/
-
-var goRoutineIdOffset uint64 = 0
-
-func goRoutinePtr() unsafe.Pointer
-
-func goRoutineId() uint64 {
-	data := (*[32]uint64)(goRoutinePtr())
-	if offset := atomic.LoadUint64(&goRoutineIdOffset); offset != 0 {
-		return data[int(offset)]
-	}
-	id := goRoutineIdSlow()
-	var n, offset int
-	for idx, v := range data[:] {
-		if v == id {
-			offset = idx
-			n++
-			if n >= 2 {
-				break
-			}
-		}
-	}
-	if n == 1 {
-		atomic.StoreUint64(&goRoutineIdOffset, uint64(offset))
-	}
-	return id
-}
-
-func goRoutineIdSlow() uint64 {
-	var buf [64]byte
-	n := runtime.Stack(buf[:], false)
-	stk := strings.TrimPrefix(string(buf[:n]), "goroutine ")
-	if id, err := strconv.Atoi(strings.Fields(stk)[0]); err != nil {
-		panic(err)
-	} else {
-		return uint64(id)
-	}
-}
-
-//============================================================================
-// pointer helpers
-//============================================================================
 
 // noEscape is to cheat the escape analyser to avoid heap alloc.
 //
@@ -130,11 +69,15 @@ func interfaceOfUnexported(v reflect.Value) (ret interface{}) {
 }
 
 func noMalloc(f func()) {
+	checkMalloc(0, f)
+}
+
+func checkMalloc(max uint64, f func()) {
 	var s, e runtime.MemStats
 	runtime.ReadMemStats(&s)
 	f()
 	runtime.ReadMemStats(&e)
-	if n := e.Mallocs - s.Mallocs; n > 0 {
+	if n := e.Mallocs - s.Mallocs; n > max {
 		panic(fmt.Errorf("has %v malloc", n))
 	}
 }
@@ -164,14 +107,6 @@ func (p *syncPool[T]) put(v *T) {
 	p.Lock()
 	defer p.Unlock()
 	p.pool = append(p.pool, v)
-}
-
-func (p *syncPool[T]) putMany(v []*T) {
-	p.Lock()
-	defer p.Unlock()
-	for i := 0; i < len(v); i++ {
-		p.pool = append(p.pool, v[i])
-	}
 }
 
 func (p *syncPool[T]) clear() {

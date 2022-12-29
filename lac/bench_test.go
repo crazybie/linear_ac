@@ -29,7 +29,7 @@ var largeConfigData []*PbDataEx
 
 func makeGlobalData() {
 	if largeConfigData == nil {
-		largeConfigData = make([]*PbDataEx, 100000)
+		largeConfigData = make([]*PbDataEx, 10000)
 		for i := range largeConfigData {
 			largeConfigData[i] = makeData(i)
 		}
@@ -85,7 +85,7 @@ func Benchmark_LinearAc(t *testing.B) {
 				}
 
 				for n := 0; n < subLoop; n++ {
-					ac := BindNew()
+					ac := Get()
 					_ = makeDataAc(ac, n)
 					ac.Release()
 				}

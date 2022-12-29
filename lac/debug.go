@@ -32,8 +32,8 @@ func (ac *Allocator) internalPointer(addr uintptr) bool {
 	}
 
 	for _, c := range ac.chunks {
-		h := (*sliceHeader)(unsafe.Pointer(c))
-		if addr >= uintptr(h.Data) && addr < uintptr(h.Data)+uintptr(h.Cap) {
+		h := (*reflect.SliceHeader)(unsafe.Pointer(c))
+		if addr >= h.Data && addr < h.Data+uintptr(h.Cap) {
 			return true
 		}
 	}
@@ -109,11 +109,11 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 				}
 
 			case reflect.Slice:
-				h := (*sliceHeader)(unsafe.Pointer(f.UnsafeAddr()))
-				if f.Len() > 0 && h.Data != nil {
+				h := (*reflect.SliceHeader)(unsafe.Pointer(f.UnsafeAddr()))
+				if f.Len() > 0 && h.Data != 0 {
 					found := false
 					for _, i := range ac.externalSlice {
-						if i == h.Data {
+						if i == unsafe.Pointer(h.Data) {
 							found = true
 							break
 						}
@@ -128,7 +128,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 					}
 				}
 				if invalidatePointers {
-					h.Data = nil
+					h.Data = 0
 					h.Len = math.MaxInt32
 					h.Cap = math.MaxInt32
 				}

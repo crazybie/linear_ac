@@ -11,7 +11,6 @@ package lac
 
 import (
 	"reflect"
-	"sync"
 	"sync/atomic"
 	"unsafe"
 )
@@ -19,31 +18,8 @@ import (
 // BuildInAc switches to native allocator.
 var BuildInAc = &Allocator{disabled: true}
 
-var acMap = sync.Map{}
-
 var acPool = syncPool[Allocator]{
 	New: newLac,
-}
-
-// Bind allocator to goroutine
-
-func BindNew() *Allocator {
-	ac := acPool.get()
-	acMap.Store(goRoutineId(), ac)
-	return ac
-}
-
-func BindGet() *Allocator {
-	if val, ok := acMap.Load(goRoutineId()); ok {
-		return val.(*Allocator)
-	}
-	return BuildInAc
-}
-
-func (ac *Allocator) Unbind() {
-	if BindGet() == ac {
-		acMap.Delete(goRoutineId())
-	}
 }
 
 func Get() *Allocator {
@@ -54,7 +30,6 @@ func (ac *Allocator) Release() {
 	if ac == BuildInAc {
 		return
 	}
-	ac.Unbind()
 	ac.reset()
 	acPool.put(ac)
 }
@@ -201,7 +176,7 @@ func Append[T any](ac *Allocator, s []T, v T) []T {
 		return append(s, v)
 	}
 
-	header := (*sliceHeader)(unsafe.Pointer(&s))
+	header := (*reflect.SliceHeader)(unsafe.Pointer(&s))
 	ac.sliceAppend(header, unsafe.Pointer(&v), int(unsafe.Sizeof(v)))
 	return s
 }

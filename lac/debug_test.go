@@ -16,7 +16,8 @@ import (
 
 func Test_CheckArray(t *testing.T) {
 	DbgMode = true
-	ac := BindNew()
+	ac := Get()
+
 	defer func() {
 		if err := recover(); err == nil {
 			t.Errorf("faile to check")
@@ -37,19 +38,20 @@ func Test_CheckArray(t *testing.T) {
 
 func Test_CheckInternalSlice(t *testing.T) {
 	DbgMode = true
-	ac := BindNew()
+	ac := Get()
+	defer ac.Release()
 
 	type D struct {
 		v []int
 	}
 	d := New[D](ac)
 	d.v = NewSlice[int](ac, 1, 0)
-	ac.Release()
 }
 
 func Test_CheckExternalSlice(t *testing.T) {
 	DbgMode = true
-	ac := BindNew()
+	ac := Get()
+
 	defer func() {
 		if err := recover(); err == nil {
 			t.Errorf("faile to check")
@@ -66,12 +68,15 @@ func Test_CheckExternalSlice(t *testing.T) {
 		d.v[i] = new(int)
 		*d.v[i] = i
 	}
+
 	ac.Release()
 }
 
 func Test_CheckKnownExternalSlice(t *testing.T) {
 	DbgMode = true
-	ac := BindNew()
+	ac := Get()
+	defer ac.Release()
+
 	defer func() {
 		if err := recover(); err != nil {
 			t.Errorf("faile to check")
@@ -88,18 +93,19 @@ func Test_CheckKnownExternalSlice(t *testing.T) {
 		d.v[i] = AttachExternal(ac, new(int))
 		*d.v[i] = i
 	}
-	ac.Release()
 }
 
 func TestUseAfterFree_Pointer(t *testing.T) {
 	DbgMode = true
+	ac := Get()
+
 	defer func() {
 		DbgMode = false
 		if err := recover(); err == nil {
 			t.Errorf("failed to check")
 		}
 	}()
-	ac := BindNew()
+
 	d := New[PbData](ac)
 	d.Age = ac.Int(11)
 	ac.Release()
@@ -116,7 +122,7 @@ func TestUseAfterFree_StructPointer(t *testing.T) {
 			t.Errorf("failed to check")
 		}
 	}()
-	ac := BindNew()
+	ac := Get()
 
 	d := New[PbData](ac)
 	d.InUse = New[PbItem](ac)
@@ -136,7 +142,7 @@ func TestUseAfterFree_Slice(t *testing.T) {
 		}
 	}()
 
-	ac := BindNew()
+	ac := Get()
 	d := New[PbData](ac)
 	ac.NewSlice(&d.Items, 1, 1)
 	ac.Release()
@@ -152,7 +158,8 @@ func Test_WorkWithGc(t *testing.T) {
 		v [10]*int
 	}
 
-	ac := BindNew()
+	ac := Get()
+	defer ac.Release()
 	d := New[D](ac)
 
 	for i := 0; i < len(d.v); i++ {
@@ -167,12 +174,13 @@ func Test_WorkWithGc(t *testing.T) {
 			t.Errorf("int %v is gced: %v", i, *p)
 		}
 	}
-	ac.Release()
 }
 
 func TestLinearAllocator_CheckNewMap(t *testing.T) {
 	DbgMode = true
-	ac := BindNew()
+	ac := Get()
+	defer ac.Release()
+
 	defer func() {
 		if err := recover(); err != nil {
 			t.Errorf("faile to check")
@@ -184,12 +192,12 @@ func TestLinearAllocator_CheckNewMap(t *testing.T) {
 	}
 	d := New[D](ac)
 	d.m = NewMap[int, *int](ac)
-	ac.Release()
 }
 
 func TestLinearAllocator_CheckExternalMap(t *testing.T) {
 	DbgMode = true
-	ac := BindNew()
+	ac := Get()
+
 	defer func() {
 		if err := recover(); err == nil {
 			t.Errorf("faile to check")
@@ -201,11 +209,13 @@ func TestLinearAllocator_CheckExternalMap(t *testing.T) {
 	}
 	d := New[D](ac)
 	d.m = make(map[int]*int)
+
 	ac.Release()
 }
 
 func TestAllocator_CheckExternalEnum(t *testing.T) {
-	ac := BindNew()
+	ac := Get()
+
 	defer func() {
 		if err := recover(); err == nil {
 			t.Errorf("failed to check")
@@ -219,7 +229,9 @@ func TestAllocator_CheckExternalEnum(t *testing.T) {
 
 func TestAllocator_AcAsField(t *testing.T) {
 	DbgMode = true
-	ac := BindNew()
+	ac := Get()
+	defer ac.Release()
+
 	defer func() {
 		if err := recover(); err != nil {
 			t.Errorf("failed to check")
@@ -232,5 +244,4 @@ func TestAllocator_AcAsField(t *testing.T) {
 
 	s := New[S](ac)
 	s.ac = ac
-	ac.Release()
 }

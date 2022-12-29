@@ -10,11 +10,8 @@
 package lac
 
 import (
-	"math/rand"
 	"runtime"
-	"sync"
 	"testing"
-	"time"
 	"unsafe"
 )
 
@@ -39,30 +36,6 @@ func TestAllocator_AttachExternalIface(t *testing.T) {
 		var v interface{} = i
 		AttachExternal(ac, v)
 	})
-}
-
-func TestBindAc(t *testing.T) {
-	useAc := func() *Allocator {
-		return BindGet()
-	}
-
-	wg := sync.WaitGroup{}
-	for i := 0; i < 1000; i++ {
-		wg.Add(1)
-		go func() {
-
-			ac := BindNew()
-			defer ac.Release()
-
-			time.Sleep(time.Duration(rand.Float32()*1000) * time.Millisecond)
-
-			if useAc() != ac {
-				t.Fail()
-			}
-			wg.Done()
-		}()
-	}
-	wg.Wait()
 }
 
 func TestLinearAllocator_NewExternalPtr(b *testing.T) {

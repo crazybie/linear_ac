@@ -84,7 +84,7 @@ func (ac *Allocator) keepAlive(ptr interface{}) {
 	case reflect.Ptr:
 		ac.externalPtr = append(ac.externalPtr, d)
 	case reflect.Slice:
-		ac.externalSlice = append(ac.externalSlice, (*sliceHeader)(d).Data)
+		ac.externalSlice = append(ac.externalSlice, unsafe.Pointer((*reflect.SliceHeader)(d).Data))
 	case reflect.Map:
 		ac.externalMap = append(ac.externalMap, d)
 	default:
@@ -107,7 +107,11 @@ func (ac *Allocator) reset() {
 		if DbgMode {
 			diagnosisChunkPool.Put(ck)
 		} else {
-			chunkPool.put(ck)
+			// only reuse the normal chunks,
+			// otherwise we may have too many large chunks wasted.
+			if cap(*ck) == ChunkSize {
+				chunkPool.put(ck)
+			}
 		}
 	}
 	// clear all ref
@@ -161,9 +165,13 @@ start:
 	used := len(*cur)
 
 	if used+aligned > cap(*cur) {
+
 		if ac.curChunk == len(ac.chunks)-1 {
+			// if we get to the end of the chunk list,
+			// we enqueue a new one the end of it.
 			var ck *chunk
 			if aligned > ChunkSize {
+				// recreate a large chunk
 				c := make(chunk, 0, aligned)
 				ck = &c
 			} else {
@@ -171,6 +179,8 @@ start:
 			}
 			ac.chunks = append(ac.chunks, ck)
 		} else if cap(*ac.chunks[ac.curChunk+1]) < aligned {
+			// if the next normal chunk is still under required size,
+			// recreate a large one and replace it.
 			chunkPool.put(ac.chunks[ac.curChunk+1])
 			ck := make(chunk, 0, aligned)
 			ac.chunks[ac.curChunk+1] = &ck
@@ -181,7 +191,8 @@ start:
 	}
 
 	*cur = (*cur)[:used+aligned]
-	ptr := unsafe.Add((*sliceHeader)(unsafe.Pointer(cur)).Data, used)
+	base := unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(cur)).Data)
+	ptr := unsafe.Add(base, used)
 	if zero {
 		memclrNoHeapPointers(ptr, uintptr(aligned))
 	}
@@ -222,10 +233,10 @@ func (ac *Allocator) NewString(v string) string {
 	if ac.disabled {
 		return v
 	}
-	h := (*stringHeader)(unsafe.Pointer(&v))
+	h := (*reflect.StringHeader)(unsafe.Pointer(&v))
 	ptr := ac.alloc(h.Len, false)
-	memmove(ptr, h.Data, uintptr(h.Len))
-	h.Data = ptr
+	memmove(ptr, unsafe.Pointer(h.Data), uintptr(h.Len))
+	h.Data = uintptr(ptr)
 	return v
 }
 
@@ -258,11 +269,11 @@ func (ac *Allocator) NewSlice(slicePtr interface{}, len, cap int) {
 		panic("need a pointer to slice")
 	}
 
-	slice := (*sliceHeader)(data(slicePtrTmp))
+	slice := (*reflect.SliceHeader)(data(slicePtrTmp))
 	if cap < len {
 		cap = len
 	}
-	slice.Data = ac.alloc(cap*int(slicePtrType.Elem().Elem().Size()), false)
+	slice.Data = uintptr(ac.alloc(cap*int(slicePtrType.Elem().Elem().Size()), false))
 	slice.Len = len
 	slice.Cap = cap
 }
@@ -289,11 +300,11 @@ func (ac *Allocator) CopySlice(slice interface{}) (ret interface{}) {
 
 	// input is a temp copy, directly use it.
 	ret = sliceTmp
-	header := (*sliceHeader)(data(sliceTmp))
+	header := (*reflect.SliceHeader)(data(sliceTmp))
 	size := int(elemType.Size()) * header.Len
 	dst := ac.alloc(size, false)
-	memmove(dst, header.Data, uintptr(size))
-	header.Data = dst
+	memmove(dst, unsafe.Pointer(header.Data), uintptr(size))
+	header.Data = uintptr(dst)
 
 	runtime.KeepAlive(slice)
 	return ret
@@ -322,7 +333,7 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, elem interface{}) {
 		panic("elem type not match with slice")
 	}
 
-	header := (*sliceHeader)(data(slicePtrTmp))
+	header := (*reflect.SliceHeader)(data(slicePtrTmp))
 	ptr := data(elem)
 	if sliceElemTp.Kind() == reflect.Ptr {
 		u := uintptr(ptr)
@@ -331,7 +342,7 @@ func (ac *Allocator) SliceAppend(slicePtr interface{}, elem interface{}) {
 	ac.sliceAppend(header, ptr, int(sliceElemTp.Size()))
 }
 
-func (ac *Allocator) sliceAppend(s *sliceHeader, elemPtr unsafe.Pointer, elemSz int) {
+func (ac *Allocator) sliceAppend(s *reflect.SliceHeader, elemPtr unsafe.Pointer, elemSz int) {
 	// grow
 	if s.Len >= s.Cap {
 		pre := *s
@@ -339,13 +350,13 @@ func (ac *Allocator) sliceAppend(s *sliceHeader, elemPtr unsafe.Pointer, elemSz 
 		if s.Cap == 0 {
 			s.Cap = 4
 		}
-		s.Data = ac.alloc(s.Cap*elemSz, false)
-		memmove(s.Data, pre.Data, uintptr(pre.Len*elemSz))
+		s.Data = uintptr(ac.alloc(s.Cap*elemSz, false))
+		memmove(unsafe.Pointer(s.Data), unsafe.Pointer(pre.Data), uintptr(pre.Len*elemSz))
 	}
 
 	// append
 	if s.Len < s.Cap {
-		dst := unsafe.Add(s.Data, elemSz*s.Len)
+		dst := unsafe.Add(unsafe.Pointer(s.Data), elemSz*s.Len)
 		memmove(dst, elemPtr, uintptr(elemSz))
 		s.Len++
 	}
