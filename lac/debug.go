@@ -13,8 +13,20 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sync"
 	"unsafe"
 )
+
+// Objects in sync.Pool will be recycled on demand by the system (usually after two full-gc).
+// we can put chunks here to make pointers live longer,
+// useful to diagnosis use-after-free bugs.
+var diagnosisChunkPool = sync.Pool{}
+
+func init() {
+	if DbgMode {
+		ChunkSize /= 8
+	}
+}
 
 // Use 1 instead of nil or MaxUint64 to
 // 1. make non-nil check pass.
@@ -32,7 +44,7 @@ func (ac *Allocator) internalPointer(addr uintptr) bool {
 	}
 
 	for _, c := range ac.chunks {
-		h := (*reflect.SliceHeader)(unsafe.Pointer(c))
+		h := (*reflect.SliceHeader)(unsafe.Pointer(&c))
 		if addr >= h.Data && addr < h.Data+uintptr(h.Cap) {
 			return true
 		}
@@ -118,7 +130,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 							break
 						}
 					}
-					if !found && !ac.internalPointer((uintptr)(h.Data)) {
+					if !found && !ac.internalPointer(h.Data) {
 						return fmt.Errorf("%s: unexpected external slice: %s", fieldName(i), f.String())
 					}
 					for j := 0; j < f.Len(); j++ {

@@ -211,7 +211,7 @@ var makeItemAc = func(j int, ac *Allocator) *PbItemEx {
 	r.Class = ac.Int(3 + j)
 	r.Name1 = ac.String("name")
 	r.Active = ac.Bool(true)
-	r.EnumVal = ac.Enum(EnumVal2).(*EnumA)
+	r.EnumVal = NewEnum(ac, EnumVal2)
 	return r
 }
 
@@ -297,31 +297,31 @@ func makeDataAc(ac *Allocator, i int) *PbDataEx {
 	d.InUse10 = makeItemAc(i, ac)
 
 	for j := 0; j < itemLoop; j++ {
-		ac.SliceAppend(&d.Items1, makeItemAc(j, ac))
+		d.Items1 = Append(ac, d.Items1, makeItemAc(j, ac))
 	}
 	for j := 0; j < itemLoop; j++ {
-		ac.SliceAppend(&d.Items2, makeItemAc(j, ac))
+		d.Items2 = Append(ac, d.Items2, makeItemAc(j, ac))
 	}
 	for j := 0; j < itemLoop; j++ {
-		ac.SliceAppend(&d.Items3, makeItemAc(j, ac))
+		d.Items3 = Append(ac, d.Items3, makeItemAc(j, ac))
 	}
 	for j := 0; j < itemLoop; j++ {
-		ac.SliceAppend(&d.Items4, makeItemAc(j, ac))
+		d.Items4 = Append(ac, d.Items4, makeItemAc(j, ac))
 	}
 	for j := 0; j < itemLoop; j++ {
-		ac.SliceAppend(&d.Items5, makeItemAc(j, ac))
+		d.Items5 = Append(ac, d.Items5, makeItemAc(j, ac))
 	}
 	for j := 0; j < itemLoop; j++ {
-		ac.SliceAppend(&d.Items6, makeItemAc(j, ac))
+		d.Items6 = Append(ac, d.Items6, makeItemAc(j, ac))
 	}
 	for j := 0; j < itemLoop; j++ {
-		ac.SliceAppend(&d.Items7, makeItemAc(j, ac))
+		d.Items7 = Append(ac, d.Items7, makeItemAc(j, ac))
 	}
 	for j := 0; j < itemLoop; j++ {
-		ac.SliceAppend(&d.Items8, makeItemAc(j, ac))
+		d.Items8 = Append(ac, d.Items8, makeItemAc(j, ac))
 	}
 	for j := 0; j < itemLoop; j++ {
-		ac.SliceAppend(&d.Items9, makeItemAc(j, ac))
+		d.Items9 = Append(ac, d.Items9, makeItemAc(j, ac))
 	}
 	return d
 }

@@ -31,6 +31,17 @@ var (
 
 const PtrSize = int(unsafe.Sizeof(uintptr(0)))
 
+type sliceHeader struct {
+	Data unsafe.Pointer
+	Len  int
+	Cap  int
+}
+
+type stringHeader struct {
+	Data unsafe.Pointer
+	Len  int
+}
+
 type emptyInterface struct {
 	Type unsafe.Pointer
 	Data unsafe.Pointer
@@ -42,15 +53,14 @@ type reflectedValue struct {
 }
 
 //go:linkname memclrNoHeapPointers reflect.memclrNoHeapPointers
+//go:noescape
 func memclrNoHeapPointers(ptr unsafe.Pointer, n uintptr)
 
-//go:linkname memmove reflect.memmove
-func memmove(to, from unsafe.Pointer, n uintptr)
+//go:linkname memmoveNoHeapPointers reflect.memmove
+//go:noescape
+func memmoveNoHeapPointers(to, from unsafe.Pointer, n uintptr)
 
 // noEscape is to cheat the escape analyser to avoid heap alloc.
-//
-//go:noinline
-//go:nosplit
 func noEscape(p interface{}) (ret interface{}) {
 	*(*[2]uintptr)(unsafe.Pointer(&ret)) = *(*[2]uintptr)(unsafe.Pointer(&p))
 	return
@@ -78,21 +88,25 @@ func checkMalloc(max uint64, f func()) {
 	f()
 	runtime.ReadMemStats(&e)
 	if n := e.Mallocs - s.Mallocs; n > max {
-		panic(fmt.Errorf("has %v malloc", n))
+		panic(fmt.Errorf("has %v malloc, bytes: %v", n, e.HeapAlloc-s.HeapAlloc))
 	}
 }
 
 //============================================================================
-// syncPool
+// Pool
 //============================================================================
 
-type syncPool[T any] struct {
+// Pool pros over sync.Pool:
+// 1. generic API
+// 2. no boxing
+// 3. support reserving in advance
+type Pool[T any] struct {
 	sync.Mutex
-	New  func() *T
-	pool []*T
+	New  func() T
+	pool []T
 }
 
-func (p *syncPool[T]) get() *T {
+func (p *Pool[T]) get() T {
 	p.Lock()
 	defer p.Unlock()
 	if len(p.pool) == 0 {
@@ -103,19 +117,19 @@ func (p *syncPool[T]) get() *T {
 	return r
 }
 
-func (p *syncPool[T]) put(v *T) {
+func (p *Pool[T]) put(v T) {
 	p.Lock()
 	defer p.Unlock()
 	p.pool = append(p.pool, v)
 }
 
-func (p *syncPool[T]) clear() {
+func (p *Pool[T]) clear() {
 	p.Lock()
 	defer p.Unlock()
 	p.pool = nil
 }
 
-func (p *syncPool[T]) reserve(cnt int) {
+func (p *Pool[T]) reserve(cnt int) {
 	p.Lock()
 	defer p.Unlock()
 	for i := 0; i < cnt; i++ {

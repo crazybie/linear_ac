@@ -9,7 +9,23 @@
 
 package lac
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+)
+
+func TestNoMalloc(t *testing.T) {
+	defer func() {
+		if err := recover(); err == nil {
+			t.Errorf("should panic")
+		}
+	}()
+	var i *int
+	noMalloc(func() {
+		i = new(int)
+	})
+	runtime.KeepAlive(i)
+}
 
 func Test_NoEscape(t *testing.T) {
 	s := []int{1, 2}

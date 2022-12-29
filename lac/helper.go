@@ -18,7 +18,7 @@ import (
 // BuildInAc switches to native allocator.
 var BuildInAc = &Allocator{disabled: true}
 
-var acPool = syncPool[Allocator]{
+var acPool = Pool[*Allocator]{
 	New: newLac,
 }
 
@@ -44,11 +44,110 @@ func (ac *Allocator) DecRef() {
 	}
 }
 
+//============================================================================
+// allocation APIs
+//============================================================================
+
+func New[T any](ac *Allocator) (r *T) {
+	if ac.disabled {
+		return new(T)
+	}
+	return ac.typedAlloc(reflect.TypeOf((*T)(nil)), unsafe.Sizeof(*r), true).(*T)
+}
+
+func NewFrom[T any](ac *Allocator, v *T) *T {
+	from := noEscape(v).(*T)
+	if ac.disabled {
+		return from
+	}
+	ret := ac.typedAlloc(reflect.TypeOf((*T)(nil)), unsafe.Sizeof(*from), false).(*T)
+	memmoveNoHeapPointers(data(ret), unsafe.Pointer(from), unsafe.Sizeof(*from))
+	return ret
+}
+
+func NewEnum[T any](ac *Allocator, e T) *T {
+	if ac.disabled {
+		r := new(T)
+		*r = e
+		return r
+	}
+	r := ac.typedAlloc(reflect.TypeOf((*T)(nil)), unsafe.Sizeof(e), false).(*T)
+	*r = e
+	return r
+}
+
+func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
+	if ac.disabled {
+		return make([]T, len, cap)
+	}
+
+	slice := (*sliceHeader)(unsafe.Pointer(&r))
+	var t T
+	if cap < len {
+		cap = len
+	}
+	slice.Data = ac.alloc(cap*int(unsafe.Sizeof(t)), false)
+	slice.Len = len
+	slice.Cap = cap
+	return r
+}
+
+func NewMap[K comparable, V any](ac *Allocator, cap int) map[K]V {
+	m := make(map[K]V, cap)
+	ac.keepAlive(m)
+	return m
+}
+
+func AttachExternal[T any](ac *Allocator, ptr T) T {
+	ac.keepAlive(ptr)
+	return ptr
+}
+
+func Append[T any](ac *Allocator, s []T, v T) []T {
+	if ac.disabled {
+		return append(s, v)
+	}
+
+	h := (*sliceHeader)(unsafe.Pointer(&s))
+	elemSz := int(unsafe.Sizeof(v))
+	// grow
+	if h.Len >= h.Cap {
+		pre := *h
+		h.Cap *= 2
+		if h.Cap == 0 {
+			h.Cap = 4
+		}
+		h.Data = ac.alloc(h.Cap*elemSz, false)
+		memmoveNoHeapPointers(h.Data, pre.Data, uintptr(pre.Len*elemSz))
+	}
+	// append
+	if h.Len < h.Cap {
+		memmoveNoHeapPointers(unsafe.Add(h.Data, elemSz*h.Len), unsafe.Pointer(&v), uintptr(elemSz))
+		h.Len++
+	}
+	return s
+}
+
+func (ac *Allocator) NewString(v string) string {
+	if ac.disabled {
+		return v
+	}
+	h := (*stringHeader)(unsafe.Pointer(&v))
+	ptr := ac.alloc(h.Len, false)
+	memmoveNoHeapPointers(ptr, h.Data, uintptr(h.Len))
+	h.Data = ptr
+	return v
+}
+
+//============================================================================
+// Protobuf APIs
+//============================================================================
+
 func (ac *Allocator) Bool(v bool) (r *bool) {
 	if ac.disabled {
 		r = new(bool)
 	} else {
-		r = ac.typedNew(boolPtrType, unsafe.Sizeof(v), false).(*bool)
+		r = ac.typedAlloc(boolPtrType, unsafe.Sizeof(v), false).(*bool)
 	}
 	*r = v
 	return
@@ -58,7 +157,7 @@ func (ac *Allocator) Int(v int) (r *int) {
 	if ac.disabled {
 		r = new(int)
 	} else {
-		r = ac.typedNew(intPtrType, unsafe.Sizeof(v), false).(*int)
+		r = ac.typedAlloc(intPtrType, unsafe.Sizeof(v), false).(*int)
 	}
 	*r = v
 	return
@@ -68,7 +167,7 @@ func (ac *Allocator) Int32(v int32) (r *int32) {
 	if ac.disabled {
 		r = new(int32)
 	} else {
-		r = ac.typedNew(i32PtrType, unsafe.Sizeof(v), false).(*int32)
+		r = ac.typedAlloc(i32PtrType, unsafe.Sizeof(v), false).(*int32)
 	}
 	*r = v
 	return
@@ -78,7 +177,7 @@ func (ac *Allocator) Uint32(v uint32) (r *uint32) {
 	if ac.disabled {
 		r = new(uint32)
 	} else {
-		r = ac.typedNew(u32PtrType, unsafe.Sizeof(v), false).(*uint32)
+		r = ac.typedAlloc(u32PtrType, unsafe.Sizeof(v), false).(*uint32)
 	}
 	*r = v
 	return
@@ -88,7 +187,7 @@ func (ac *Allocator) Int64(v int64) (r *int64) {
 	if ac.disabled {
 		r = new(int64)
 	} else {
-		r = ac.typedNew(i64PtrType, unsafe.Sizeof(v), false).(*int64)
+		r = ac.typedAlloc(i64PtrType, unsafe.Sizeof(v), false).(*int64)
 	}
 	*r = v
 	return
@@ -98,7 +197,7 @@ func (ac *Allocator) Uint64(v uint64) (r *uint64) {
 	if ac.disabled {
 		r = new(uint64)
 	} else {
-		r = ac.typedNew(u64PtrType, unsafe.Sizeof(v), false).(*uint64)
+		r = ac.typedAlloc(u64PtrType, unsafe.Sizeof(v), false).(*uint64)
 	}
 	*r = v
 	return
@@ -108,7 +207,7 @@ func (ac *Allocator) Float32(v float32) (r *float32) {
 	if ac.disabled {
 		r = new(float32)
 	} else {
-		r = ac.typedNew(f32PtrType, unsafe.Sizeof(v), false).(*float32)
+		r = ac.typedAlloc(f32PtrType, unsafe.Sizeof(v), false).(*float32)
 	}
 	*r = v
 	return
@@ -118,7 +217,7 @@ func (ac *Allocator) Float64(v float64) (r *float64) {
 	if ac.disabled {
 		r = new(float64)
 	} else {
-		r = ac.typedNew(f64PtrType, unsafe.Sizeof(v), false).(*float64)
+		r = ac.typedAlloc(f64PtrType, unsafe.Sizeof(v), false).(*float64)
 	}
 	*r = v
 	return
@@ -129,54 +228,8 @@ func (ac *Allocator) String(v string) (r *string) {
 		r = new(string)
 		*r = v
 	} else {
-		r = ac.typedNew(strPtrType, unsafe.Sizeof(v), false).(*string)
+		r = ac.typedAlloc(strPtrType, unsafe.Sizeof(v), false).(*string)
 		*r = ac.NewString(v)
 	}
 	return
-}
-
-//--------------------------------------
-// generic APIs
-//--------------------------------------
-
-func New[T any](ac *Allocator) *T {
-	return ac.typedNew(reflect.TypeOf((*T)(nil)), 0, true).(*T)
-}
-
-func NewFrom[T any](ac *Allocator, from *T) *T {
-	return ac.NewFrom(from).(*T)
-}
-
-func NewEnum[T any](ac *Allocator, e T) *T {
-	return ac.Enum(e).(*T)
-}
-
-func NewSlice[T any](ac *Allocator, len, cap int) []T {
-	var r []T
-	ac.NewSlice(&r, len, cap)
-	return r
-}
-
-func NewMap[K comparable, V any](ac *Allocator) map[K]V {
-	var r map[K]V
-	ac.NewMap(&r)
-	return r
-}
-
-func AttachExternal[T any](ac *Allocator, ptr T) T {
-	ac.keepAlive(ptr)
-	return ptr
-}
-
-// Append has no heap alloc, but caller side has weired malloc.
-// prefer the no-generic version: SliceAppend.
-func Append[T any](ac *Allocator, s []T, v T) []T {
-
-	if ac.disabled {
-		return append(s, v)
-	}
-
-	header := (*reflect.SliceHeader)(unsafe.Pointer(&s))
-	ac.sliceAppend(header, unsafe.Pointer(&v), int(unsafe.Sizeof(v)))
-	return s
 }

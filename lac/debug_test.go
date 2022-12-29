@@ -144,7 +144,7 @@ func TestUseAfterFree_Slice(t *testing.T) {
 
 	ac := Get()
 	d := New[PbData](ac)
-	ac.NewSlice(&d.Items, 1, 1)
+	d.Items = NewSlice[*PbItem](ac, 1, 1)
 	ac.Release()
 
 	if cap(d.Items) == 1 {
@@ -176,7 +176,7 @@ func Test_WorkWithGc(t *testing.T) {
 	}
 }
 
-func TestLinearAllocator_CheckNewMap(t *testing.T) {
+func Test_CheckNewMap(t *testing.T) {
 	DbgMode = true
 	ac := Get()
 	defer ac.Release()
@@ -191,10 +191,10 @@ func TestLinearAllocator_CheckNewMap(t *testing.T) {
 		m map[int]*int
 	}
 	d := New[D](ac)
-	d.m = NewMap[int, *int](ac)
+	d.m = NewMap[int, *int](ac, 0)
 }
 
-func TestLinearAllocator_CheckExternalMap(t *testing.T) {
+func Test_CheckExternalMap(t *testing.T) {
 	DbgMode = true
 	ac := Get()
 
@@ -213,7 +213,7 @@ func TestLinearAllocator_CheckExternalMap(t *testing.T) {
 	ac.Release()
 }
 
-func TestAllocator_CheckExternalEnum(t *testing.T) {
+func Test_CheckExternalEnum(t *testing.T) {
 	ac := Get()
 
 	defer func() {
@@ -227,7 +227,7 @@ func TestAllocator_CheckExternalEnum(t *testing.T) {
 	ac.Release()
 }
 
-func TestAllocator_AcAsField(t *testing.T) {
+func Test_LacAsField(t *testing.T) {
 	DbgMode = true
 	ac := Get()
 	defer ac.Release()
