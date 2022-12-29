@@ -1,5 +1,5 @@
 
-# LAC - Linear Allocator for Golang
+# Lac - Linear Allocator for Golang
 
 ## Goal
 Speed up the memory allocation and improve the GC performance, especially for dynamic-memory-heavy applications.
@@ -10,32 +10,32 @@ NOTE: current version need go1.18+.
 1. A large amount of memory never needs to be released. (global configs, read-only assets like navmesh)
 2. Massive temporary objects with deterministic lifetime. (protobuf objects send to network)
 
-
-# Pros over v1.20 arena
-1. Much faster on allocating(see benchmark results below), gc marking and sweeping.
-2. Support concurrency.
-3. Slice append can utilize the linear allocator as well. 
-4. Support debugging mode.
-
-
 ## Highlights
 Linear allocator:
 
 1. Mush fast on memory allocating. An allocation is just a pointer adjustment internally.
-2. Can greatly reduce the object scanning pressure of GC. LAC is just a few byte arrays internally, but pool is normal container always need to be scanned fully.
-3. More general. LAC can allocate various types of objects.
+2. Can greatly reduce the object scanning pressure of GC. Lac is just a few byte arrays internally, but pool is normal container always need to be scanned fully.
+3. More general. Lac can allocate various types of objects.
 4. Much simpler and faster on reclaiming memories. No need to manually release every object back but just reset the allocation cursor.
-5. Much cheaper. LACs reuse memory chunks among each other via chunk pool. 
+5. Much cheaper. Lac reuse memory chunks among each other via chunk pool. 
 6. Memory efficient. Memories are more compact, CPU cache-friendly.
-7. Allows build-in allocated objects to be attached to the LAC allocated objects. 
+7. Allows build-in allocated objects to be attached to the Lac allocated objects. 
 8. Support concurrency.
+9. Provide protobuf like APIs.
 
 
 ## Limitations
-1. Never store pointers to build-in allocated objects into LAC allocated objects **directly**. (There's a debug mode for checking external pointers)
-2. Never store and use pointers to LAC allocated objects after the allocator is reset or released. (In debug mode, the allocator traverses the objects and obfuscate the pointers to make any attempting usage panic)
-3. Map memory can't use LAC and fallback to build-in one.
+1. Never store pointers to build-in allocated objects into Lac allocated objects **directly**. (There's a debug mode for checking external pointers)
+2. Never store or use pointers to Lac allocated objects after the allocator is released. (In debug mode, the allocator traverses the objects and obfuscate the pointers to make any attempting usage panic)
+3. Map memory can't use Lac and fallback to build-in allocator.
 
+
+# Pros over v1.20 arena
+1. Much faster on allocating(see benchmark results below), gc marking and sweeping.
+2. Support concurrency.
+3. Slice append can utilize Lac as well.
+4. Support debugging mode.
+5. Provide protobuf like APIs.
 
 ## Usage
 
@@ -70,7 +70,7 @@ func main() {
 		item.Class = ac.Int(3 + i)
 		item.Name = ac.String("name")
 
-		ac.SliceAppend(&d.Items, item)
+		d.Items = Append(ac, d.Items, item)
 	}
 }
 ```
