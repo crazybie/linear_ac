@@ -14,6 +14,13 @@ import (
 	"testing"
 )
 
+func Test_GoRoutineId(t *testing.T) {
+	id := goRoutineId()
+	if id != goRoutineIdSlow() {
+		t.Fail()
+	}
+}
+
 func TestNoMalloc(t *testing.T) {
 	defer func() {
 		if err := recover(); err == nil {
@@ -31,10 +38,12 @@ func Test_NoEscape(t *testing.T) {
 	s := []int{1, 2}
 	m := map[int]int{1: 10, 2: 20}
 
+	var v interface{}
 	noMalloc(func() {
 		i := 1
-		_ = noEscape(i)
-		_ = noEscape(s)
-		_ = noEscape(m)
+		v = noEscape(i)
+		v = noEscape(s)
+		v = noEscape(m)
 	})
+	runtime.KeepAlive(v)
 }

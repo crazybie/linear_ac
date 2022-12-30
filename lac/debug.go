@@ -211,7 +211,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 				}
 
 			default:
-				return fmt.Errorf("unsupported type: %v, %v", fieldName(i), f.String())
+				fmt.Printf("WARNING: pointer checking: unsupported type: %v, %v\n", fieldName(i), f.String())
 			}
 		}
 	}

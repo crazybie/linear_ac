@@ -12,6 +12,7 @@ package lac
 import (
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -59,7 +60,7 @@ func newLac() *Allocator {
 
 func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 	// shared with other goroutines?
-	if ac.refCnt > 1 {
+	if atomic.LoadInt32(&ac.refCnt) > 1 {
 		ac.Lock()
 		defer ac.Unlock()
 	}
@@ -142,7 +143,7 @@ func (ac *Allocator) reset() {
 	ac.externalMap = ac.externalMap[:0]
 
 	ac.disabled = DisableLinearAc
-	ac.refCnt = 1
+	atomic.StoreInt32(&ac.refCnt, 1)
 }
 
 func (ac *Allocator) typedAlloc(ptrTp reflect.Type, sz uintptr, zero bool) (ret interface{}) {
@@ -177,7 +178,7 @@ func (ac *Allocator) keepAlive(ptr interface{}) {
 	case reflect.Slice:
 		ac.externalSlice = append(ac.externalSlice, (*sliceHeader)(d).Data)
 	case reflect.String:
-		ac.externalString = append(ac.externalSlice, (*stringHeader)(d).Data)
+		ac.externalString = append(ac.externalString, (*stringHeader)(d).Data)
 	case reflect.Map:
 		ac.externalMap = append(ac.externalMap, d)
 	case reflect.Func:

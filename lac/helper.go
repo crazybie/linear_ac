@@ -58,7 +58,10 @@ func New[T any](ac *Allocator) (r *T) {
 func NewFrom[T any](ac *Allocator, v *T) *T {
 	from := noEscape(v).(*T)
 	if ac.disabled {
-		return from
+		// since the v is stack allocated due to noEscape, migrate it to heap.
+		r := new(T)
+		*r = *v
+		return r
 	}
 	ret := ac.typedAlloc(reflect.TypeOf((*T)(nil)), unsafe.Sizeof(*from), false).(*T)
 	memmoveNoHeapPointers(data(ret), unsafe.Pointer(from), unsafe.Sizeof(*from))

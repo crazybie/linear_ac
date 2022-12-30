@@ -13,7 +13,10 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -61,7 +64,10 @@ func memclrNoHeapPointers(ptr unsafe.Pointer, n uintptr)
 func memmoveNoHeapPointers(to, from unsafe.Pointer, n uintptr)
 
 // noEscape is to cheat the escape analyser to avoid heap alloc.
-func noEscape(p interface{}) (ret interface{}) {
+// NOTE:
+// it's danger to make the must-escaped value as noEscape,
+// for example mark a pointer returned from a function that points to the function's stack object as noEscape.
+func noEscape(p any) (ret any) {
 	*(*[2]uintptr)(unsafe.Pointer(&ret)) = *(*[2]uintptr)(unsafe.Pointer(&p))
 	return
 }
@@ -134,5 +140,48 @@ func (p *Pool[T]) reserve(cnt int) {
 	defer p.Unlock()
 	for i := 0; i < cnt; i++ {
 		p.pool = append(p.pool, p.New())
+	}
+}
+
+//============================================================================
+// GoroutineId
+//============================================================================
+
+// https://notes.volution.ro/v1/2019/08/notes/23e3644e/
+
+var goRoutineIdOffset uint64 = 0
+
+func goRoutinePtr() unsafe.Pointer
+
+func goRoutineId() uint64 {
+	d := (*[32]uint64)(goRoutinePtr())
+	if offset := atomic.LoadUint64(&goRoutineIdOffset); offset != 0 {
+		return d[int(offset)]
+	}
+	id := goRoutineIdSlow()
+	var n, offset int
+	for idx, v := range d[:] {
+		if v == id {
+			offset = idx
+			n++
+			if n >= 2 {
+				break
+			}
+		}
+	}
+	if n == 1 {
+		atomic.StoreUint64(&goRoutineIdOffset, uint64(offset))
+	}
+	return id
+}
+
+func goRoutineIdSlow() uint64 {
+	var buf [64]byte
+	n := runtime.Stack(buf[:], false)
+	stk := strings.TrimPrefix(string(buf[:n]), "goroutine ")
+	if id, err := strconv.Atoi(strings.Fields(stk)[0]); err != nil {
+		panic(err)
+	} else {
+		return uint64(id)
 	}
 }
