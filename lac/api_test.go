@@ -216,7 +216,7 @@ func Test_NewFrom(b *testing.T) {
 }
 
 func Test_NewCopyNoAlloc(b *testing.T) {
-	chunkPool.reserve(1)
+	chunkPool.Reserve(1)
 	ac := Get()
 	defer ac.Release()
 
@@ -357,7 +357,7 @@ func Test_SliceAppendStructValue(t *testing.T) {
 }
 
 func Test_AppendNoMallocSimple(t *testing.T) {
-	chunkPool.reserve(1)
+	chunkPool.Reserve(1)
 	ac := Get()
 	defer ac.Release()
 	s := []int{1}
@@ -370,7 +370,7 @@ func Test_AppendNoMallocSimple(t *testing.T) {
 }
 
 func Test_AppendNoMalloc(t *testing.T) {
-	chunkPool.reserve(1)
+	chunkPool.Reserve(1)
 	ac := Get()
 	defer ac.Release()
 

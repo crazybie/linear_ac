@@ -23,7 +23,7 @@ var acPool = Pool[*Allocator]{
 }
 
 func Get() *Allocator {
-	return acPool.get()
+	return acPool.Get()
 }
 
 func (ac *Allocator) Release() {
@@ -31,7 +31,7 @@ func (ac *Allocator) Release() {
 		return
 	}
 	ac.reset()
-	acPool.put(ac)
+	acPool.Put(ac)
 }
 
 func (ac *Allocator) IncRef() {

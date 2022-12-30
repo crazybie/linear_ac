@@ -70,7 +70,7 @@ func Dispatch(genTasks func(chan func(int))) {
 
 func Benchmark_LinearAc(t *testing.B) {
 	DbgMode = false
-	chunkPool.reserve(1600)
+	chunkPool.Reserve(1600)
 	makeGlobalData()
 	runtime.GC()
 	t.StartTimer()
@@ -93,8 +93,8 @@ func Benchmark_LinearAc(t *testing.B) {
 		}
 	})
 
-	acPool.clear()
-	chunkPool.clear()
+	acPool.Clear()
+	chunkPool.Clear()
 }
 
 func Benchmark_buildInAc(t *testing.B) {

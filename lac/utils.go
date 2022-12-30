@@ -13,10 +13,6 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
-	"strconv"
-	"strings"
-	"sync"
-	"sync/atomic"
 	"unsafe"
 )
 
@@ -95,93 +91,5 @@ func checkMalloc(max uint64, f func()) {
 	runtime.ReadMemStats(&e)
 	if n := e.Mallocs - s.Mallocs; n > max {
 		panic(fmt.Errorf("has %v malloc, bytes: %v", n, e.HeapAlloc-s.HeapAlloc))
-	}
-}
-
-//============================================================================
-// Pool
-//============================================================================
-
-// Pool pros over sync.Pool:
-// 1. generic API
-// 2. no boxing
-// 3. support reserving in advance
-type Pool[T any] struct {
-	sync.Mutex
-	New  func() T
-	pool []T
-}
-
-func (p *Pool[T]) get() T {
-	p.Lock()
-	defer p.Unlock()
-	if len(p.pool) == 0 {
-		return p.New()
-	}
-	r := p.pool[len(p.pool)-1]
-	p.pool = p.pool[:len(p.pool)-1]
-	return r
-}
-
-func (p *Pool[T]) put(v T) {
-	p.Lock()
-	defer p.Unlock()
-	p.pool = append(p.pool, v)
-}
-
-func (p *Pool[T]) clear() {
-	p.Lock()
-	defer p.Unlock()
-	p.pool = nil
-}
-
-func (p *Pool[T]) reserve(cnt int) {
-	p.Lock()
-	defer p.Unlock()
-	for i := 0; i < cnt; i++ {
-		p.pool = append(p.pool, p.New())
-	}
-}
-
-//============================================================================
-// GoroutineId
-//============================================================================
-
-// https://notes.volution.ro/v1/2019/08/notes/23e3644e/
-
-var goRoutineIdOffset uint64 = 0
-
-func goRoutinePtr() unsafe.Pointer
-
-func goRoutineId() uint64 {
-	d := (*[32]uint64)(goRoutinePtr())
-	if offset := atomic.LoadUint64(&goRoutineIdOffset); offset != 0 {
-		return d[int(offset)]
-	}
-	id := goRoutineIdSlow()
-	var n, offset int
-	for idx, v := range d[:] {
-		if v == id {
-			offset = idx
-			n++
-			if n >= 2 {
-				break
-			}
-		}
-	}
-	if n == 1 {
-		atomic.StoreUint64(&goRoutineIdOffset, uint64(offset))
-	}
-	return id
-}
-
-func goRoutineIdSlow() uint64 {
-	var buf [64]byte
-	n := runtime.Stack(buf[:], false)
-	stk := strings.TrimPrefix(string(buf[:n]), "goroutine ")
-	if id, err := strconv.Atoi(strings.Fields(stk)[0]); err != nil {
-		panic(err)
-	} else {
-		return uint64(id)
 	}
 }

@@ -14,13 +14,6 @@ import (
 	"testing"
 )
 
-func Test_GoRoutineId(t *testing.T) {
-	id := goRoutineId()
-	if id != goRoutineIdSlow() {
-		t.Fail()
-	}
-}
-
 func TestNoMalloc(t *testing.T) {
 	defer func() {
 		if err := recover(); err == nil {

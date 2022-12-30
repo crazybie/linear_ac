@@ -28,14 +28,20 @@ func init() {
 	}
 }
 
+// CheckExternalPointers is useful for if you want to check external pointers but don't want to invalidate pointers.
+// e.g. using lac as memory allocator for config data globally.
+func (ac *Allocator) CheckExternalPointers() {
+	ac.debugCheck(false)
+}
+
 // Use 1 instead of nil or MaxUint64 to
 // 1. make non-nil check pass.
 // 2. generate a recoverable panic.
-const nonNilPanicableAddr = uintptr(1)
+const nonNilPanickyAddr = uintptr(1)
 
 func (ac *Allocator) internalPointer(addr uintptr) bool {
 
-	if addr == 0 || addr == nonNilPanicableAddr {
+	if addr == 0 || addr == nonNilPanickyAddr {
 		return true
 	}
 
@@ -58,30 +64,36 @@ func (ac *Allocator) internalPointer(addr uintptr) bool {
 	return false
 }
 
+type CheckCtx struct {
+	checked            map[interface{}]struct{}
+	unsupportedTypes   map[string]struct{}
+	invalidatePointers bool
+}
+
 // NOTE: all memories must be referenced by structs.
 func (ac *Allocator) debugCheck(invalidatePointers bool) {
-	checked := map[interface{}]struct{}{}
+	ctx := &CheckCtx{
+		checked:            map[interface{}]struct{}{},
+		unsupportedTypes:   map[string]struct{}{},
+		invalidatePointers: invalidatePointers,
+	}
+
 	// reverse order to bypass obfuscated pointers
 	for i := len(ac.dbgScanObjs) - 1; i >= 0; i-- {
 		ptr := ac.dbgScanObjs[i]
-		if _, ok := checked[ptr]; ok {
+		if _, ok := ctx.checked[ptr]; ok {
 			continue
 		}
-		if err := ac.checkRecursively(reflect.ValueOf(ptr), checked, invalidatePointers); err != nil {
+		if err := ac.checkRecursively(reflect.ValueOf(ptr), ctx); err != nil {
+			dumpUnsupportedTypes(ctx)
 			panic(err)
 		}
 	}
 }
 
-// CheckExternalPointers is useful for if you want to check external pointers but don't want to invalidate pointers.
-// e.g. using lac as memory allocator for config data globally.
-func (ac *Allocator) CheckExternalPointers() {
-	ac.debugCheck(false)
-}
-
-func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}]struct{}, invalidatePointers bool) error {
+func (ac *Allocator) checkRecursively(val reflect.Value, ctx *CheckCtx) error {
 	if val.Kind() == reflect.Ptr {
-		if val.Pointer() != nonNilPanicableAddr && !val.IsNil() {
+		if val.Pointer() != nonNilPanickyAddr && !val.IsNil() {
 			if !ac.internalPointer(val.Pointer()) {
 				return fmt.Errorf("unexpected external pointer: %+v", val)
 			}
@@ -93,10 +105,10 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 			}
 
 			if tp.Kind() == reflect.Struct {
-				if err := ac.checkRecursively(val.Elem(), checked, invalidatePointers); err != nil {
+				if err := ac.checkRecursively(val.Elem(), ctx); err != nil {
 					return err
 				}
-				checked[interfaceOfUnexported(val)] = struct{}{}
+				ctx.checked[interfaceOfUnexported(val)] = struct{}{}
 			}
 		}
 		return nil
@@ -119,11 +131,11 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 				// no need to check.
 
 			case reflect.Ptr:
-				if err := ac.checkRecursively(f, checked, invalidatePointers); err != nil {
+				if err := ac.checkRecursively(f, ctx); err != nil {
 					return fmt.Errorf("%v: %v", fieldName(i), err)
 				}
-				if invalidatePointers {
-					*(*uintptr)(unsafe.Pointer(f.UnsafeAddr())) = nonNilPanicableAddr
+				if ctx.invalidatePointers {
+					*(*uintptr)(unsafe.Pointer(f.UnsafeAddr())) = nonNilPanickyAddr
 				}
 
 			case reflect.Slice:
@@ -140,12 +152,12 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 						return fmt.Errorf("%s: unexpected external slice: %s", fieldName(i), f.String())
 					}
 					for j := 0; j < f.Len(); j++ {
-						if err := ac.checkRecursively(f.Index(j), checked, invalidatePointers); err != nil {
+						if err := ac.checkRecursively(f.Index(j), ctx); err != nil {
 							return fmt.Errorf("%v: %v", fieldName(i), err)
 						}
 					}
 				}
-				if invalidatePointers {
+				if ctx.invalidatePointers {
 					h.Data = nil
 					h.Len = math.MaxInt32
 					h.Cap = math.MaxInt32
@@ -153,7 +165,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 
 			case reflect.Array:
 				for j := 0; j < f.Len(); j++ {
-					if err := ac.checkRecursively(f.Index(j), checked, invalidatePointers); err != nil {
+					if err := ac.checkRecursively(f.Index(j), ctx); err != nil {
 						return fmt.Errorf("%v: %v", fieldName(i), err)
 					}
 				}
@@ -171,7 +183,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 					return fmt.Errorf("%v: unexpected external map: %+v", fieldName(i), f)
 				}
 				for iter := f.MapRange(); iter.Next(); {
-					if err := ac.checkRecursively(iter.Value(), checked, invalidatePointers); err != nil {
+					if err := ac.checkRecursively(iter.Value(), ctx); err != nil {
 						return fmt.Errorf("%v: %v", fieldName(i), err)
 					}
 				}
@@ -190,7 +202,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 						return fmt.Errorf("%s: unexpected external string: %s", fieldName(i), f.String())
 					}
 				}
-				if invalidatePointers {
+				if ctx.invalidatePointers {
 					h.Data = nil
 					h.Len = math.MaxInt32
 				}
@@ -211,9 +223,26 @@ func (ac *Allocator) checkRecursively(val reflect.Value, checked map[interface{}
 				}
 
 			default:
-				fmt.Printf("WARNING: pointer checking: unsupported type: %v, %v\n", fieldName(i), f.String())
+				msg := fmt.Sprintf("WARNING: pointer checking: unsupported type: %v, %v\n", fieldName(i), f.String())
+				ctx.unsupportedTypes[msg] = struct{}{}
 			}
 		}
 	}
 	return nil
+}
+
+var unsupportedTypes = struct {
+	sync.Mutex
+	m map[string]struct{}
+}{m: map[string]struct{}{}}
+
+func dumpUnsupportedTypes(ctx *CheckCtx) {
+	unsupportedTypes.Lock()
+	for k := range ctx.unsupportedTypes {
+		if _, ok := unsupportedTypes.m[k]; !ok {
+			unsupportedTypes.m[k] = struct{}{}
+			fmt.Printf(k)
+		}
+	}
+	unsupportedTypes.Unlock()
 }

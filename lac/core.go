@@ -66,7 +66,7 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 	}
 
 	if len(ac.chunks) == 0 {
-		ac.chunks = append(ac.chunks, chunkPool.get())
+		ac.chunks = append(ac.chunks, chunkPool.Get())
 	}
 
 	aligned := (need + PtrSize + 1) & ^(PtrSize - 1)
@@ -85,13 +85,13 @@ start:
 				// recreate a large chunk
 				ck = make(chunk, 0, aligned)
 			} else {
-				ck = chunkPool.get()
+				ck = chunkPool.Get()
 			}
 			ac.chunks = append(ac.chunks, ck)
 		} else if cap(ac.chunks[ac.curChunk+1]) < aligned {
 			// if the next normal chunk is still under required size,
 			// recreate a large one and replace it.
-			chunkPool.put(ac.chunks[ac.curChunk+1])
+			chunkPool.Put(ac.chunks[ac.curChunk+1])
 			ac.chunks[ac.curChunk+1] = make(chunk, 0, aligned)
 		}
 
@@ -125,7 +125,7 @@ func (ac *Allocator) reset() {
 			// only reuse the normal chunks,
 			// otherwise we may have too many large chunks wasted.
 			if cap(ck) == ChunkSize {
-				chunkPool.put(ck)
+				chunkPool.Put(ck)
 			}
 		}
 	}
