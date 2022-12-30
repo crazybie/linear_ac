@@ -10,6 +10,7 @@
 package lac
 
 import (
+	"fmt"
 	"reflect"
 	"sync/atomic"
 	"unsafe"
@@ -84,11 +85,12 @@ func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
 		return make([]T, len, cap)
 	}
 
+	if len > cap {
+		panic(fmt.Errorf("NewSlice: cap out of range"))
+	}
+
 	slice := (*sliceHeader)(unsafe.Pointer(&r))
 	var t T
-	if cap < len {
-		cap = len
-	}
 	slice.Data = ac.alloc(cap*int(unsafe.Sizeof(t)), false)
 	slice.Len = len
 	slice.Cap = cap

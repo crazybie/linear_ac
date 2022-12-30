@@ -395,3 +395,21 @@ func Test_AppendNoMalloc(t *testing.T) {
 		}
 	}
 }
+
+func Test_NilAc(t *testing.T) {
+	s := NewSlice[byte](nil, 10, 10)
+	if cap(s) != 10 {
+		t.Fail()
+	}
+}
+
+func Test_SliceWrongCap(t *testing.T) {
+	defer func() {
+		if err := recover(); err == nil {
+			panic(fmt.Errorf("should panic: out of range"))
+		}
+	}()
+	ac := Get()
+	defer ac.Release()
+	NewSlice[byte](ac, 10, 0)
+}
