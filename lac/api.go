@@ -49,7 +49,7 @@ func (ac *Allocator) DecRef() {
 //============================================================================
 
 func New[T any](ac *Allocator) (r *T) {
-	if ac.disabled {
+	if ac == nil || ac.disabled {
 		return new(T)
 	}
 	return ac.typedAlloc(reflect.TypeOf((*T)(nil)), unsafe.Sizeof(*r), true).(*T)
@@ -57,7 +57,7 @@ func New[T any](ac *Allocator) (r *T) {
 
 func NewFrom[T any](ac *Allocator, v *T) *T {
 	from := noEscape(v).(*T)
-	if ac.disabled {
+	if ac == nil || ac.disabled {
 		// since the v is stack allocated due to noEscape, migrate it to heap.
 		r := new(T)
 		*r = *v
@@ -69,7 +69,7 @@ func NewFrom[T any](ac *Allocator, v *T) *T {
 }
 
 func NewEnum[T any](ac *Allocator, e T) *T {
-	if ac.disabled {
+	if ac == nil || ac.disabled {
 		r := new(T)
 		*r = e
 		return r
@@ -80,7 +80,7 @@ func NewEnum[T any](ac *Allocator, e T) *T {
 }
 
 func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
-	if ac.disabled {
+	if ac == nil || ac.disabled {
 		return make([]T, len, cap)
 	}
 
@@ -97,17 +97,23 @@ func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
 
 func NewMap[K comparable, V any](ac *Allocator, cap int) map[K]V {
 	m := make(map[K]V, cap)
+	if ac == nil || ac.disabled {
+		return m
+	}
 	ac.keepAlive(m)
 	return m
 }
 
 func AttachExternal[T any](ac *Allocator, ptr T) T {
+	if ac == nil || ac.disabled {
+		return ptr
+	}
 	ac.keepAlive(ptr)
 	return ptr
 }
 
 func Append[T any](ac *Allocator, s []T, v T) []T {
-	if ac.disabled {
+	if ac == nil || ac.disabled {
 		return append(s, v)
 	}
 
@@ -132,7 +138,7 @@ func Append[T any](ac *Allocator, s []T, v T) []T {
 }
 
 func (ac *Allocator) NewString(v string) string {
-	if ac.disabled {
+	if ac == nil || ac.disabled {
 		return v
 	}
 	h := (*stringHeader)(unsafe.Pointer(&v))
@@ -147,7 +153,7 @@ func (ac *Allocator) NewString(v string) string {
 //============================================================================
 
 func (ac *Allocator) Bool(v bool) (r *bool) {
-	if ac.disabled {
+	if ac == nil || ac.disabled {
 		r = new(bool)
 	} else {
 		r = ac.typedAlloc(boolPtrType, unsafe.Sizeof(v), false).(*bool)
@@ -157,7 +163,7 @@ func (ac *Allocator) Bool(v bool) (r *bool) {
 }
 
 func (ac *Allocator) Int(v int) (r *int) {
-	if ac.disabled {
+	if ac == nil || ac.disabled {
 		r = new(int)
 	} else {
 		r = ac.typedAlloc(intPtrType, unsafe.Sizeof(v), false).(*int)
@@ -167,7 +173,7 @@ func (ac *Allocator) Int(v int) (r *int) {
 }
 
 func (ac *Allocator) Int32(v int32) (r *int32) {
-	if ac.disabled {
+	if ac == nil || ac.disabled {
 		r = new(int32)
 	} else {
 		r = ac.typedAlloc(i32PtrType, unsafe.Sizeof(v), false).(*int32)
@@ -177,7 +183,7 @@ func (ac *Allocator) Int32(v int32) (r *int32) {
 }
 
 func (ac *Allocator) Uint32(v uint32) (r *uint32) {
-	if ac.disabled {
+	if ac == nil || ac.disabled {
 		r = new(uint32)
 	} else {
 		r = ac.typedAlloc(u32PtrType, unsafe.Sizeof(v), false).(*uint32)
@@ -187,7 +193,7 @@ func (ac *Allocator) Uint32(v uint32) (r *uint32) {
 }
 
 func (ac *Allocator) Int64(v int64) (r *int64) {
-	if ac.disabled {
+	if ac == nil || ac.disabled {
 		r = new(int64)
 	} else {
 		r = ac.typedAlloc(i64PtrType, unsafe.Sizeof(v), false).(*int64)
@@ -197,7 +203,7 @@ func (ac *Allocator) Int64(v int64) (r *int64) {
 }
 
 func (ac *Allocator) Uint64(v uint64) (r *uint64) {
-	if ac.disabled {
+	if ac == nil || ac.disabled {
 		r = new(uint64)
 	} else {
 		r = ac.typedAlloc(u64PtrType, unsafe.Sizeof(v), false).(*uint64)
@@ -207,7 +213,7 @@ func (ac *Allocator) Uint64(v uint64) (r *uint64) {
 }
 
 func (ac *Allocator) Float32(v float32) (r *float32) {
-	if ac.disabled {
+	if ac == nil || ac.disabled {
 		r = new(float32)
 	} else {
 		r = ac.typedAlloc(f32PtrType, unsafe.Sizeof(v), false).(*float32)
@@ -217,7 +223,7 @@ func (ac *Allocator) Float32(v float32) (r *float32) {
 }
 
 func (ac *Allocator) Float64(v float64) (r *float64) {
-	if ac.disabled {
+	if ac == nil || ac.disabled {
 		r = new(float64)
 	} else {
 		r = ac.typedAlloc(f64PtrType, unsafe.Sizeof(v), false).(*float64)
@@ -227,7 +233,7 @@ func (ac *Allocator) Float64(v float64) (r *float64) {
 }
 
 func (ac *Allocator) String(v string) (r *string) {
-	if ac.disabled {
+	if ac == nil || ac.disabled {
 		r = new(string)
 		*r = v
 	} else {
