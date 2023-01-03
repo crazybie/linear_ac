@@ -215,7 +215,7 @@ func Test_NewFrom(b *testing.T) {
 	}
 }
 
-func Test_NewCopyNoAlloc(b *testing.T) {
+func Test_NewFromNoAlloc(b *testing.T) {
 	chunkPool.Reserve(1)
 	ac := Get()
 	defer ac.Release()

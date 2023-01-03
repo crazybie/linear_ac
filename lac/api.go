@@ -106,6 +106,7 @@ func NewMap[K comparable, V any](ac *Allocator, cap int) map[K]V {
 	return m
 }
 
+// AttachExternal can attach lac objects as well with no side effects.
 func AttachExternal[T any](ac *Allocator, ptr T) T {
 	if ac == nil || ac.disabled {
 		return ptr

@@ -60,8 +60,8 @@ func memclrNoHeapPointers(ptr unsafe.Pointer, n uintptr)
 func memmoveNoHeapPointers(to, from unsafe.Pointer, n uintptr)
 
 // noEscape is to cheat the escape analyser to avoid heap alloc.
-// NOTE:
-// it's danger to make the must-escaped value as noEscape,
+// WARNING:
+// it's danger to mark the must-escaped value as noEscape,
 // for example mark a pointer returned from a function that points to the function's stack object as noEscape.
 func noEscape(p any) (ret any) {
 	*(*[2]uintptr)(unsafe.Pointer(&ret)) = *(*[2]uintptr)(unsafe.Pointer(&p))

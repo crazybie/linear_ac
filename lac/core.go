@@ -17,9 +17,9 @@ import (
 )
 
 var (
-	DbgMode         = false
-	DisableLinearAc = false
-	ChunkSize       = 1024 * 8
+	DbgMode    = false
+	DisableLac = false
+	ChunkSize  = 1024 * 8
 )
 
 // Chunk
@@ -51,7 +51,7 @@ type Allocator struct {
 
 func newLac() *Allocator {
 	ac := &Allocator{
-		disabled: DisableLinearAc,
+		disabled: DisableLac,
 		refCnt:   1,
 		chunks:   make([]chunk, 0, 1),
 	}
@@ -60,9 +60,13 @@ func newLac() *Allocator {
 
 func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 	// shared with other goroutines?
+	shared := false
 	if atomic.LoadInt32(&ac.refCnt) > 1 {
+		shared = true
+	}
+
+	if shared {
 		ac.Lock()
-		defer ac.Unlock()
 	}
 
 	if len(ac.chunks) == 0 {
@@ -100,6 +104,11 @@ start:
 	}
 
 	ac.chunks[ac.curChunk] = cur[:used+aligned]
+
+	if shared {
+		ac.Unlock()
+	}
+
 	ptr := unsafe.Add((*sliceHeader)(unsafe.Pointer(&cur)).Data, used)
 	if zero {
 		memclrNoHeapPointers(ptr, uintptr(aligned))
@@ -142,7 +151,7 @@ func (ac *Allocator) reset() {
 	ac.externalSlice = ac.externalSlice[:0]
 	ac.externalMap = ac.externalMap[:0]
 
-	ac.disabled = DisableLinearAc
+	ac.disabled = DisableLac
 	atomic.StoreInt32(&ac.refCnt, 1)
 }
 
