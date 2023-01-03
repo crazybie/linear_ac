@@ -36,11 +36,14 @@ func (ac *Allocator) Release() {
 }
 
 //IncRef should be used at outside the new goroutine, e.g.
-// 	ac.IncRef()
+//
+// 	ac.IncRef() // <- should be called outside the new goroutine.
 //  go func(){
 // 		defer ac.DecRef()
-//	}
-// no in the new goroutine, otherwise the new goroutine maybe delayed after the caller quit,
+//		....
+//	}{}
+//
+// not in the new goroutine, otherwise the new goroutine maybe delayed after the caller quit,
 // which may cause a UseAfterFree error.
 func (ac *Allocator) IncRef() {
 	atomic.AddInt32(&ac.refCnt, 1)

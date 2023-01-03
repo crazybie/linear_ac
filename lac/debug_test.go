@@ -45,7 +45,7 @@ func Test_CheckInternalSlice(t *testing.T) {
 		v []int
 	}
 	d := New[D](ac)
-	d.v = NewSlice[int](ac, 1, 0)
+	d.v = NewSlice[int](ac, 1, 1)
 }
 
 func Test_CheckExternalSlice(t *testing.T) {
