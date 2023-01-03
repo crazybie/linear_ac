@@ -22,14 +22,14 @@ import (
 // useful to diagnosis use-after-free bugs.
 var diagnosisChunkPool = sync.Pool{}
 
-func init() {
-	// use more chunks in debug mode to help diagnosis bugs.
-	if dbgMode {
-		ChunkSize /= 8
-	}
-}
-
 func EnableDebugMode(v bool) {
+	// use more chunks in debug mode to help diagnosis bugs.
+	if v {
+		ChunkSize /= 8
+	} else if dbgMode {
+		ChunkSize *= 8
+	}
+
 	dbgMode = v
 	acPool.Debug = v
 	chunkPool.Debug = v
