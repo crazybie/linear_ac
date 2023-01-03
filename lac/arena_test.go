@@ -126,7 +126,7 @@ func makeDataArena(ac *arena.Arena, i int) *PbDataEx {
 }
 
 func Benchmark_LacMallocLarge(t *testing.B) {
-	DbgMode = false
+	EnableDebugMode(false)
 	runtime.GC()
 	ac := Get()
 
@@ -153,7 +153,7 @@ func Benchmark_ArenaMallocLarge(t *testing.B) {
 }
 
 func Benchmark_LacMallocSmall(t *testing.B) {
-	DbgMode = false
+	EnableDebugMode(false)
 	runtime.GC()
 	ac := Get()
 

@@ -20,7 +20,9 @@ import (
 var BuildInAc = &Allocator{disabled: true}
 
 var acPool = Pool[*Allocator]{
-	New: newLac,
+	New:   newLac,
+	Max:   1000,
+	Equal: func(a, b *Allocator) bool { return a == b },
 }
 
 func Get() *Allocator {
@@ -45,10 +47,15 @@ func (ac *Allocator) Release() {
 //
 // not in the new goroutine, otherwise the new goroutine maybe delayed after the caller quit,
 // which may cause a UseAfterFree error.
+// if IncRef is not call correctly the ac will be recycled ahead of time, in debug mode your ac allocated
+// objects become corrupted and panic occurs when using them.
 func (ac *Allocator) IncRef() {
 	atomic.AddInt32(&ac.refCnt, 1)
 }
 
+// DecRef will put the ac back into pool if ref count reduced to zero.
+// In case of DecRef not called correctly the ac can not be reused by pool and will be recycled by GC later.
+// so no serious side effects if DecRef is not called correctly.
 func (ac *Allocator) DecRef() {
 	if atomic.AddInt32(&ac.refCnt, -1) <= 0 {
 		ac.Release()

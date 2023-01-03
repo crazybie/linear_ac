@@ -14,17 +14,24 @@
 
 package lac
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+)
 
 type Pool[T any] struct {
-	m    sync.Mutex
-	New  func() T
-	pool []T
+	m     sync.Mutex
+	New   func() T
+	pool  []T
+	Max   int
+	Debug bool
+	Equal func(a, b T) bool
 }
 
 func (p *Pool[T]) Get() T {
 	p.m.Lock()
 	defer p.m.Unlock()
+
 	if len(p.pool) == 0 {
 		return p.New()
 	}
@@ -36,18 +43,31 @@ func (p *Pool[T]) Get() T {
 func (p *Pool[T]) Put(v T) {
 	p.m.Lock()
 	defer p.m.Unlock()
-	p.pool = append(p.pool, v)
+
+	if p.Debug && p.Equal != nil {
+		for _, i := range p.pool {
+			if p.Equal(i, v) {
+				panic(fmt.Errorf("already in pool: %v, %v", i, v))
+			}
+		}
+	}
+
+	if p.Max == 0 || len(p.pool) < p.Max {
+		p.pool = append(p.pool, v)
+	}
 }
 
 func (p *Pool[T]) Clear() {
 	p.m.Lock()
 	defer p.m.Unlock()
+
 	p.pool = nil
 }
 
 func (p *Pool[T]) Reserve(cnt int) {
 	p.m.Lock()
 	defer p.m.Unlock()
+
 	p.pool = make([]T, cnt)
 	for i := 0; i < cnt; i++ {
 		p.pool[i] = p.New()

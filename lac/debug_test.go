@@ -15,7 +15,7 @@ import (
 )
 
 func Test_CheckArray(t *testing.T) {
-	DbgMode = true
+	EnableDebugMode(true)
 	ac := Get()
 
 	defer func() {
@@ -37,7 +37,7 @@ func Test_CheckArray(t *testing.T) {
 }
 
 func Test_CheckInternalSlice(t *testing.T) {
-	DbgMode = true
+	EnableDebugMode(true)
 	ac := Get()
 	defer ac.Release()
 
@@ -49,7 +49,7 @@ func Test_CheckInternalSlice(t *testing.T) {
 }
 
 func Test_CheckExternalSlice(t *testing.T) {
-	DbgMode = true
+	EnableDebugMode(true)
 	ac := Get()
 
 	defer func() {
@@ -73,7 +73,7 @@ func Test_CheckExternalSlice(t *testing.T) {
 }
 
 func Test_CheckKnownExternalSlice(t *testing.T) {
-	DbgMode = true
+	EnableDebugMode(true)
 	ac := Get()
 	defer ac.Release()
 
@@ -96,11 +96,11 @@ func Test_CheckKnownExternalSlice(t *testing.T) {
 }
 
 func TestUseAfterFree_Pointer(t *testing.T) {
-	DbgMode = true
+	EnableDebugMode(true)
 	ac := Get()
 
 	defer func() {
-		DbgMode = false
+		EnableDebugMode(false)
 		if err := recover(); err == nil {
 			t.Errorf("failed to check")
 		}
@@ -115,9 +115,9 @@ func TestUseAfterFree_Pointer(t *testing.T) {
 }
 
 func TestUseAfterFree_StructPointer(t *testing.T) {
-	DbgMode = true
+	EnableDebugMode(true)
 	defer func() {
-		DbgMode = false
+		EnableDebugMode(false)
 		if err := recover(); err == nil {
 			t.Errorf("failed to check")
 		}
@@ -134,9 +134,9 @@ func TestUseAfterFree_StructPointer(t *testing.T) {
 }
 
 func TestUseAfterFree_Slice(t *testing.T) {
-	DbgMode = true
+	EnableDebugMode(true)
 	defer func() {
-		DbgMode = false
+		EnableDebugMode(false)
 		if err := recover(); err == nil {
 			t.Errorf("failed to check")
 		}
@@ -177,7 +177,7 @@ func Test_WorkWithGc(t *testing.T) {
 }
 
 func Test_CheckNewMap(t *testing.T) {
-	DbgMode = true
+	EnableDebugMode(true)
 	ac := Get()
 	defer ac.Release()
 
@@ -195,7 +195,7 @@ func Test_CheckNewMap(t *testing.T) {
 }
 
 func Test_CheckExternalMap(t *testing.T) {
-	DbgMode = true
+	EnableDebugMode(true)
 	ac := Get()
 
 	defer func() {
@@ -228,7 +228,7 @@ func Test_CheckExternalEnum(t *testing.T) {
 }
 
 func Test_LacAsField(t *testing.T) {
-	DbgMode = true
+	EnableDebugMode(true)
 	ac := Get()
 	defer ac.Release()
 
@@ -247,7 +247,7 @@ func Test_LacAsField(t *testing.T) {
 }
 
 func Test_ClosureAsField(t *testing.T) {
-	DbgMode = true
+	EnableDebugMode(true)
 	ac := Get()
 	defer ac.Release()
 
@@ -268,7 +268,7 @@ func Test_ClosureAsField(t *testing.T) {
 }
 
 func Test_ExternalClosure(t *testing.T) {
-	DbgMode = true
+	EnableDebugMode(true)
 	ac := Get()
 
 	type S struct {

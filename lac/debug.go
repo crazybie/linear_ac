@@ -17,15 +17,22 @@ import (
 	"unsafe"
 )
 
-// Objects in sync.Pool will be recycled on demand by the system (usually after two full-gc).
+// Objects in sync.Pool will be recycled on demand by the system (usually after two GC).
 // we can put chunks here to make pointers live longer,
 // useful to diagnosis use-after-free bugs.
 var diagnosisChunkPool = sync.Pool{}
 
 func init() {
-	if DbgMode {
+	// use more chunks in debug mode to help diagnosis bugs.
+	if dbgMode {
 		ChunkSize /= 8
 	}
+}
+
+func EnableDebugMode(v bool) {
+	dbgMode = v
+	acPool.Debug = v
+	chunkPool.Debug = v
 }
 
 // CheckExternalPointers is useful for if you want to check external pointers but don't want to invalidate pointers.

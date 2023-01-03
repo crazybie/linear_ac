@@ -69,7 +69,7 @@ func Dispatch(genTasks func(chan func(int))) {
 }
 
 func Benchmark_LinearAc(t *testing.B) {
-	DbgMode = false
+	EnableDebugMode(false)
 	chunkPool.Reserve(1600)
 	makeGlobalData()
 	runtime.GC()

@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	DbgMode    = false
+	dbgMode    = false
 	DisableLac = false
 	ChunkSize  = 1024 * 8
 )
@@ -29,6 +29,10 @@ type chunk []byte
 var chunkPool = Pool[chunk]{
 	New: func() chunk {
 		return make(chunk, 0, ChunkSize)
+	},
+	Max: 2000,
+	Equal: func(a, b chunk) bool {
+		return (*sliceHeader)(unsafe.Pointer(&a)).Data == (*sliceHeader)(unsafe.Pointer(&b)).Data
 	},
 }
 
@@ -121,14 +125,14 @@ func (ac *Allocator) reset() {
 		return
 	}
 
-	if DbgMode {
+	if dbgMode {
 		ac.debugCheck(true)
 		ac.dbgScanObjs = ac.dbgScanObjs[:0]
 	}
 
 	for _, ck := range ac.chunks {
 		ck = ck[:0]
-		if DbgMode {
+		if dbgMode {
 			diagnosisChunkPool.Put(ck)
 		} else {
 			// only reuse the normal chunks,
@@ -162,7 +166,7 @@ func (ac *Allocator) typedAlloc(ptrTp reflect.Type, sz uintptr, zero bool) (ret 
 	ptr := ac.alloc(int(sz), zero)
 	*(*emptyInterface)(unsafe.Pointer(&ret)) = emptyInterface{data(ptrTp), ptr}
 
-	if DbgMode {
+	if dbgMode {
 		if ptrTp.Elem().Kind() == reflect.Struct {
 			ac.dbgScanObjs = append(ac.dbgScanObjs, ret)
 		}

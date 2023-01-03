@@ -130,7 +130,7 @@ func Test_NewMap(t *testing.T) {
 }
 
 func Test_NewSlice(t *testing.T) {
-	DbgMode = true
+	EnableDebugMode(true)
 	ac := Get()
 	defer ac.Release()
 
