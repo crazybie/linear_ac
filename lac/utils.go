@@ -93,3 +93,7 @@ func checkMalloc(max uint64, f func()) {
 		panic(fmt.Errorf("has %v malloc, bytes: %v", n, e.HeapAlloc-s.HeapAlloc))
 	}
 }
+
+func sliceEqual[T any](a, b T) bool {
+	return (*sliceHeader)(unsafe.Pointer(&a)).Data == (*sliceHeader)(unsafe.Pointer(&b)).Data
+}

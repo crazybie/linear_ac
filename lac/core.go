@@ -30,10 +30,8 @@ var chunkPool = Pool[chunk]{
 	New: func() chunk {
 		return make(chunk, 0, ChunkSize)
 	},
-	Max: 2000,
-	Equal: func(a, b chunk) bool {
-		return (*sliceHeader)(unsafe.Pointer(&a)).Data == (*sliceHeader)(unsafe.Pointer(&b)).Data
-	},
+	Max:   2000,
+	Equal: sliceEqual[chunk],
 }
 
 // Allocator
