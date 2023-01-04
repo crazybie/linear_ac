@@ -280,7 +280,7 @@ func Test_AttachExternalNoAlloc(t *testing.T) {
 
 	s := new(int)
 	noMalloc(func() {
-		AttachExternal(ac, s)
+		Attach(ac, s)
 	})
 }
 
@@ -292,7 +292,7 @@ func Test_AttachExternalIface(t *testing.T) {
 	i := new(int)
 	noMalloc(func() {
 		var v interface{} = i
-		AttachExternal(ac, v)
+		Attach(ac, v)
 	})
 }
 
@@ -305,7 +305,7 @@ func Test_AttachExternal(b *testing.T) {
 	}
 	d := New[D](ac)
 	for i := 0; i < len(d.d); i++ {
-		d.d[i] = AttachExternal(ac, new(int))
+		d.d[i] = Attach(ac, new(int))
 		//d.d[i] = new(int)
 		*d.d[i] = i
 		runtime.GC()

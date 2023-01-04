@@ -21,7 +21,7 @@ Linear allocator:
 6. Memory efficient. Memories are more compact, CPU cache-friendly.
 7. Allows build-in allocated objects to be attached to the Lac allocated objects. 
 8. Support concurrency.
-9. Provide protobuf like APIs.
+9. Provide protobuf2 like APIs.
 
 
 ## Limitations
@@ -35,7 +35,7 @@ Linear allocator:
 2. Support concurrency.
 3. Slice append can utilize Lac as well.
 4. Support debugging mode.
-5. Provide protobuf like APIs.
+5. Provide protobuf2 like APIs.
 
 ## Usage
 

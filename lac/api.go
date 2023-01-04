@@ -59,7 +59,7 @@ func (ac *Allocator) IncRef() {
 
 // DecRef will put the ac back into pool if ref count reduced to zero.
 // In case of DecRef not called correctly the Lac can not be reused by pool and will be recycled by GC later.
-// so no serious side effects if DecRef is not called correctly.
+// so no serious side effects occur if DecRef is not called correctly.
 func (ac *Allocator) DecRef() {
 	if ac == nil || ac.disabled {
 		return
@@ -70,7 +70,7 @@ func (ac *Allocator) DecRef() {
 }
 
 //============================================================================
-// allocation APIs
+// Allocation APIs
 //============================================================================
 
 func New[T any](ac *Allocator) (r *T) {
@@ -130,8 +130,11 @@ func NewMap[K comparable, V any](ac *Allocator, cap int) map[K]V {
 	return m
 }
 
-// AttachExternal can attach lac objects as well with no side effects.
-func AttachExternal[T any](ac *Allocator, ptr T) T {
+// Attach mark ptr as external pointer and will keep ptr alive during GC,
+// otherwise the ptr from heap may be GCed and cause a dangled pointer, no panic will report by the runtime.
+// So make sure to mark objects from native heap as external pointers by using this function.
+// Can attach Lac objects as well without any side effects.
+func Attach[T any](ac *Allocator, ptr T) T {
 	if ac == nil || ac.disabled {
 		return ptr
 	}
@@ -176,7 +179,7 @@ func (ac *Allocator) NewString(v string) string {
 }
 
 //============================================================================
-// Protobuf APIs
+// Protobuf2 APIs
 //============================================================================
 
 func (ac *Allocator) Bool(v bool) (r *bool) {

@@ -88,9 +88,9 @@ func Test_CheckKnownExternalSlice(t *testing.T) {
 	}
 	d := New[D](ac)
 
-	d.v = AttachExternal(ac, make([]*int, 3))
+	d.v = Attach(ac, make([]*int, 3))
 	for i := 0; i < len(d.v); i++ {
-		d.v[i] = AttachExternal(ac, new(int))
+		d.v[i] = Attach(ac, new(int))
 		*d.v[i] = i
 	}
 }
@@ -256,7 +256,7 @@ func Test_ClosureAsField(t *testing.T) {
 	}
 
 	s := New[S](ac)
-	s.c = AttachExternal(ac, func() any {
+	s.c = Attach(ac, func() any {
 		return s
 	})
 
@@ -299,6 +299,6 @@ func Test_ShouldIgnoreFieldsOfMarkedExternal(t *testing.T) {
 		sub *D
 	}
 	s := New[S](ac)
-	s.sub = AttachExternal(ac, &D{i: new(int)})
+	s.sub = Attach(ac, &D{i: new(int)})
 	ac.Release()
 }
