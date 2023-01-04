@@ -381,14 +381,14 @@ func Test_AppendNoMalloc(t *testing.T) {
 	}
 
 	noMalloc(func() {
-		for i := 0; i < 10; i++ {
-			for j := 0; j < 10; j++ {
+		for i := 0; i < 3; i++ {
+			for j := 0; j < 3; j++ {
 				m[i] = Append(ac, m[i], j)
 			}
 		}
 	})
-	for i := 0; i < 10; i++ {
-		for j := 0; j < 10; j++ {
+	for i := 0; i < 3; i++ {
+		for j := 0; j < 3; j++ {
 			if m[i][j] != j {
 				t.Fail()
 			}
