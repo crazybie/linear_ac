@@ -288,3 +288,17 @@ func Test_ExternalClosure(t *testing.T) {
 
 	ac.Release()
 }
+
+func Test_ShouldIgnoreFieldsOfMarkedExternal(t *testing.T) {
+	EnableDebugMode(true)
+	ac := Get()
+	type D struct {
+		i *int
+	}
+	type S struct {
+		sub *D
+	}
+	s := New[S](ac)
+	s.sub = AttachExternal(ac, &D{i: new(int)})
+	ac.Release()
+}

@@ -46,29 +46,38 @@ func (ac *Allocator) CheckExternalPointers() {
 // 2. generate a recoverable panic.
 const nonNilPanickyAddr = uintptr(1)
 
-func (ac *Allocator) internalPointer(addr uintptr) bool {
+type PointerType int32
+
+const (
+	PointerTypeInvalid PointerType = iota
+	PointerTypeLacInternal
+	PointerTypeExternal
+	PointerTypeExternalMarked
+)
+
+func (ac *Allocator) checkPointerType(addr uintptr) PointerType {
 
 	if addr == 0 || addr == nonNilPanickyAddr {
-		return true
+		return PointerTypeLacInternal
 	}
 
 	if addr == uintptr(unsafe.Pointer(ac)) {
-		return true
+		return PointerTypeLacInternal
 	}
 
 	for _, c := range ac.chunks {
 		h := (*reflect.SliceHeader)(unsafe.Pointer(&c))
 		if addr >= h.Data && addr < h.Data+uintptr(h.Cap) {
-			return true
+			return PointerTypeLacInternal
 		}
 	}
 
 	for _, c := range ac.externalPtr {
 		if uintptr(c) == addr {
-			return true
+			return PointerTypeExternalMarked
 		}
 	}
-	return false
+	return PointerTypeExternal
 }
 
 type CheckCtx struct {
@@ -101,7 +110,8 @@ func (ac *Allocator) debugCheck(invalidatePointers bool) {
 func (ac *Allocator) checkRecursively(val reflect.Value, ctx *CheckCtx) error {
 	if val.Kind() == reflect.Ptr {
 		if val.Pointer() != nonNilPanickyAddr && !val.IsNil() {
-			if !ac.internalPointer(val.Pointer()) {
+			pt := ac.checkPointerType(val.Pointer())
+			if pt == PointerTypeExternal {
 				return fmt.Errorf("unexpected external pointer: %+v", val)
 			}
 
@@ -111,7 +121,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, ctx *CheckCtx) error {
 				return nil
 			}
 
-			if tp.Kind() == reflect.Struct {
+			if pt == PointerTypeLacInternal && tp.Kind() == reflect.Struct {
 				if err := ac.checkRecursively(val.Elem(), ctx); err != nil {
 					return err
 				}
@@ -155,12 +165,15 @@ func (ac *Allocator) checkRecursively(val reflect.Value, ctx *CheckCtx) error {
 							break
 						}
 					}
-					if !found && !ac.internalPointer(uintptr(h.Data)) {
+					pt := ac.checkPointerType(uintptr(h.Data))
+					if !found && pt == PointerTypeExternal {
 						return fmt.Errorf("%s: unexpected external slice: %s", fieldName(i), f.String())
 					}
-					for j := 0; j < f.Len(); j++ {
-						if err := ac.checkRecursively(f.Index(j), ctx); err != nil {
-							return fmt.Errorf("%v: %v", fieldName(i), err)
+					if pt == PointerTypeLacInternal {
+						for j := 0; j < f.Len(); j++ {
+							if err := ac.checkRecursively(f.Index(j), ctx); err != nil {
+								return fmt.Errorf("%v: %v", fieldName(i), err)
+							}
 						}
 					}
 				}
@@ -205,7 +218,8 @@ func (ac *Allocator) checkRecursively(val reflect.Value, ctx *CheckCtx) error {
 							break
 						}
 					}
-					if !found && !ac.internalPointer(uintptr(h.Data)) {
+					pt := ac.checkPointerType(uintptr(h.Data))
+					if !found && pt == PointerTypeExternal {
 						return fmt.Errorf("%s: unexpected external string: %s", fieldName(i), f.String())
 					}
 				}
