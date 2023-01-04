@@ -133,6 +133,7 @@ func NewMap[K comparable, V any](ac *Allocator, cap int) map[K]V {
 // Attach mark ptr as external pointer and will keep ptr alive during GC,
 // otherwise the ptr from heap may be GCed and cause a dangled pointer, no panic will report by the runtime.
 // So make sure to mark objects from native heap as external pointers by using this function.
+// External pointers will be checked in debug mode.
 // Can attach Lac objects as well without any side effects.
 func Attach[T any](ac *Allocator, ptr T) T {
 	if ac == nil || ac.disabled {
