@@ -30,7 +30,7 @@ func Get() *Allocator {
 }
 
 func (ac *Allocator) Release() {
-	if ac == BuildInAc {
+	if ac == nil || ac == BuildInAc {
 		return
 	}
 	ac.reset()
@@ -50,6 +50,9 @@ func (ac *Allocator) Release() {
 // if IncRef is not call correctly the ac will be recycled ahead of time, in debug mode your ac allocated
 // objects become corrupted and panic occurs when using them.
 func (ac *Allocator) IncRef() {
+	if ac == nil || ac.disabled {
+		return
+	}
 	atomic.AddInt32(&ac.refCnt, 1)
 }
 
@@ -57,6 +60,9 @@ func (ac *Allocator) IncRef() {
 // In case of DecRef not called correctly the ac can not be reused by pool and will be recycled by GC later.
 // so no serious side effects if DecRef is not called correctly.
 func (ac *Allocator) DecRef() {
+	if ac == nil || ac.disabled {
+		return
+	}
 	if atomic.AddInt32(&ac.refCnt, -1) <= 0 {
 		ac.Release()
 	}

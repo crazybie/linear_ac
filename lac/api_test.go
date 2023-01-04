@@ -397,10 +397,49 @@ func Test_AppendNoMalloc(t *testing.T) {
 }
 
 func Test_NilAc(t *testing.T) {
-	s := NewSlice[byte](nil, 10, 10)
-	if cap(s) != 10 {
+	var ac *Allocator
+
+	type S struct {
+		v int
+	}
+	o := New[S](ac)
+	if o == nil {
 		t.Fail()
 	}
+
+	f := NewFrom(ac, &S{})
+	if f == nil {
+		t.Fail()
+	}
+
+	m := NewMap[int, int](ac, 1)
+	if m == nil {
+		t.Fail()
+	}
+
+	s := NewSlice[byte](ac, 10, 10)
+	if cap(s) != 10 || len(s) != 10 {
+		t.Fail()
+	}
+
+	e := NewEnum(ac, EnumVal2)
+	if *e != EnumVal2 {
+		t.Fail()
+	}
+
+	i := ac.Int(1)
+	if *i != 1 {
+		t.Fail()
+	}
+
+	ss := ac.String("ss")
+	if *ss != "ss" {
+		t.Fail()
+	}
+
+	ac.IncRef()
+	ac.DecRef()
+	ac.Release()
 }
 
 func Test_SliceWrongCap(t *testing.T) {
