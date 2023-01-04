@@ -80,16 +80,31 @@ func New[T any](ac *Allocator) (r *T) {
 	return ac.typedAlloc(reflect.TypeOf((*T)(nil)), unsafe.Sizeof(*r), true).(*T)
 }
 
-func NewFrom[T any](ac *Allocator, v *T) *T {
-	from := noEscape(v).(*T)
+// NewFrom will cheat the escape analyser to alloc the src object on the stack, to reduce a heap allocation.
+// Useful to alloc an object using struct literal syntax:
+//
+// 		obj := lac.NewFrom(ac, &SomeData{
+//			Field1: Value1,
+//			Field2: Value2,
+//		})
+//
+// This is a bit clearer than the following `new` syntax:
+//
+//		obj := lac.New[SomeData](ac)
+//		obj.Field1 = Value1
+//		obj.Field2 = Value2
+//
+// and also helpful for migrating struct literal code to using Lac.
+func NewFrom[T any](ac *Allocator, src *T) *T {
+	v := noEscape(src).(*T)
 	if ac == nil || ac.disabled {
 		// since the v is stack allocated due to noEscape, migrate it to heap.
 		r := new(T)
 		*r = *v
 		return r
 	}
-	ret := ac.typedAlloc(reflect.TypeOf((*T)(nil)), unsafe.Sizeof(*from), false).(*T)
-	memmoveNoHeapPointers(data(ret), unsafe.Pointer(from), unsafe.Sizeof(*from))
+	ret := ac.typedAlloc(reflect.TypeOf((*T)(nil)), unsafe.Sizeof(*v), false).(*T)
+	memmoveNoHeapPointers(data(ret), unsafe.Pointer(v), unsafe.Sizeof(*v))
 	return ret
 }
 
