@@ -48,7 +48,7 @@ func (ac *Allocator) Release() {
 //
 // not in the new goroutine, otherwise the execution of new goroutine may be delayed after the caller quit,
 // which may cause a UseAfterFree error.
-// if IncRef is not call correctly the ac will be recycled ahead of time, in debug mode your ac allocated
+// if IncRef is not call correctly the Lac will be recycled ahead of time, in debug mode your Lac allocated
 // objects become corrupted and panic occurs when using them.
 func (ac *Allocator) IncRef() {
 	if ac == nil || ac.disabled {
@@ -58,7 +58,7 @@ func (ac *Allocator) IncRef() {
 }
 
 // DecRef will put the ac back into pool if ref count reduced to zero.
-// In case of DecRef not called correctly the ac can not be reused by pool and will be recycled by GC later.
+// In case of DecRef not called correctly the Lac can not be reused by pool and will be recycled by GC later.
 // so no serious side effects if DecRef is not called correctly.
 func (ac *Allocator) DecRef() {
 	if ac == nil || ac.disabled {
