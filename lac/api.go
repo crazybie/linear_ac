@@ -46,7 +46,7 @@ func (ac *Allocator) Release() {
 //		....
 //	}()
 //
-// not in the new goroutine, otherwise the new goroutine maybe delayed after the caller quit,
+// not in the new goroutine, otherwise the execution of new goroutine may be delayed after the caller quit,
 // which may cause a UseAfterFree error.
 // if IncRef is not call correctly the ac will be recycled ahead of time, in debug mode your ac allocated
 // objects become corrupted and panic occurs when using them.
