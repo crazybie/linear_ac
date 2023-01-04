@@ -5,7 +5,7 @@
  *
  * Improve the memory allocation and garbage collection performance.
  *
- * Copyright (C) 2020-2022 crazybie@github.com.
+ * Copyright (C) 2020-2023 crazybie@github.com.
  * https://github.com/crazybie/linear_ac
  */
 
