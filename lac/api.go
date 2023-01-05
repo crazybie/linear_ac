@@ -21,7 +21,7 @@ var BuildInAc = &Allocator{disabled: true}
 
 var acPool = Pool[*Allocator]{
 	New:   newLac,
-	Max:   1000,
+	Max:   MaxLac,
 	Equal: func(a, b *Allocator) bool { return a == b },
 }
 
@@ -58,13 +58,16 @@ func (ac *Allocator) IncRef() {
 }
 
 // DecRef will put the ac back into pool if ref count reduced to zero.
-// In case of DecRef not called correctly the Lac can not be reused by pool and will be recycled by GC later.
-// so no serious side effects occur if DecRef is not called correctly.
+// If one DecRef call is missed causes the Lac not go back to pool, it will be recycled by GC later.
+// If more DecRef calls are called cause the ref cnt reduced to negative, panic in debug mode.
 func (ac *Allocator) DecRef() {
 	if ac == nil || ac.disabled {
 		return
 	}
-	if atomic.AddInt32(&ac.refCnt, -1) <= 0 {
+	if n := atomic.AddInt32(&ac.refCnt, -1); n <= 0 {
+		if debugMode && n < 0 {
+			panic(fmt.Errorf("potential bug: ref cnt is negative: %v", n))
+		}
 		ac.Release()
 	}
 }
@@ -108,24 +111,15 @@ func NewFrom[T any](ac *Allocator, src *T) *T {
 	return ret
 }
 
-func NewEnum[T any](ac *Allocator, e T) *T {
-	if ac == nil || ac.disabled {
-		r := new(T)
-		*r = e
-		return r
-	}
-	r := ac.typedAlloc(reflect.TypeOf((*T)(nil)), unsafe.Sizeof(e), false).(*T)
-	*r = e
-	return r
-}
-
+// NewSlice does not zero the slice automatically, this is OK with most cases and can improve the performance.
+// zero it yourself for your need.
 func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
 	if ac == nil || ac.disabled {
 		return make([]T, len, cap)
 	}
 
 	if len > cap {
-		panic(fmt.Errorf("NewSlice: cap out of range"))
+		panic("NewSlice: cap out of range")
 	}
 
 	slice := (*sliceHeader)(unsafe.Pointer(&r))
@@ -134,28 +128,6 @@ func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
 	slice.Len = len
 	slice.Cap = cap
 	return r
-}
-
-func NewMap[K comparable, V any](ac *Allocator, cap int) map[K]V {
-	m := make(map[K]V, cap)
-	if ac == nil || ac.disabled {
-		return m
-	}
-	ac.keepAlive(m)
-	return m
-}
-
-// Attach mark ptr as external pointer and will keep ptr alive during GC,
-// otherwise the ptr from heap may be GCed and cause a dangled pointer, no panic will report by the runtime.
-// So make sure to mark objects from native heap as external pointers by using this function.
-// External pointers will be checked in debug mode.
-// Can attach Lac objects as well without any side effects.
-func Attach[T any](ac *Allocator, ptr T) T {
-	if ac == nil || ac.disabled {
-		return ptr
-	}
-	ac.keepAlive(ptr)
-	return ptr
 }
 
 func Append[T any](ac *Allocator, s []T, v T) []T {
@@ -183,6 +155,26 @@ func Append[T any](ac *Allocator, s []T, v T) []T {
 	return s
 }
 
+func NewMap[K comparable, V any](ac *Allocator, cap int) map[K]V {
+	m := make(map[K]V, cap)
+	if ac == nil || ac.disabled {
+		return m
+	}
+	ac.keepAlive(m)
+	return m
+}
+
+func NewEnum[T any](ac *Allocator, e T) *T {
+	if ac == nil || ac.disabled {
+		r := new(T)
+		*r = e
+		return r
+	}
+	r := ac.typedAlloc(reflect.TypeOf((*T)(nil)), unsafe.Sizeof(e), false).(*T)
+	*r = e
+	return r
+}
+
 func (ac *Allocator) NewString(v string) string {
 	if ac == nil || ac.disabled {
 		return v
@@ -192,6 +184,19 @@ func (ac *Allocator) NewString(v string) string {
 	memmoveNoHeapPointers(ptr, h.Data, uintptr(h.Len))
 	h.Data = ptr
 	return v
+}
+
+// Attach mark ptr as external pointer and will keep ptr alive during GC,
+// otherwise the ptr from heap may be GCed and cause a dangled pointer, no panic will report by the runtime.
+// So make sure to mark objects from native heap as external pointers by using this function.
+// External pointers will be checked in debug mode.
+// Can attach Lac objects as well without any side effects.
+func Attach[T any](ac *Allocator, ptr T) T {
+	if ac == nil || ac.disabled {
+		return ptr
+	}
+	ac.keepAlive(ptr)
+	return ptr
 }
 
 //============================================================================

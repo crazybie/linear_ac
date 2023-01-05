@@ -26,11 +26,11 @@ func EnableDebugMode(v bool) {
 	// use more chunks in debug mode to help diagnosis bugs.
 	if v {
 		ChunkSize /= 8
-	} else if dbgMode {
+	} else if debugMode {
 		ChunkSize *= 8
 	}
 
-	dbgMode = v
+	debugMode = v
 	acPool.Debug = v
 	chunkPool.Debug = v
 }
