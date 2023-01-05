@@ -13,8 +13,8 @@ NOTE: current version need go1.18+.
 ## Highlights
 Linear allocator:
 
-1. Mush fast on memory allocating. An allocation is just a pointer adjustment internally.
-2. Can greatly reduce the object scanning pressure of GC. Lac is just a few byte arrays internally, but pool is normal container always need to be scanned fully.
+1. Mush faster on memory allocating. An allocation is just a pointer advancement internally.
+2. Can greatly reduce the object marking pressure of GC. Lac is just a few byte arrays internally.
 3. More general. Lac can allocate various types of objects.
 4. Much simpler and faster on reclaiming memories. No need to manually release every object back but just reset the allocation cursor.
 5. Much cheaper. Lac reuse memory chunks among each other via chunk pool. 
@@ -36,6 +36,8 @@ Linear allocator:
 3. Slice append can utilize Lac as well.
 4. Support debugging mode.
 5. Provide protobuf2 like APIs.
+6. Completely pointer free (no pointer bitmap initializing, no GC marking, etc).
+7. Do not zero slices by default.
 
 ## Usage
 
