@@ -37,3 +37,20 @@ func Test_PoolMemLeak(t *testing.T) {
 		t.Errorf("memory leaked")
 	}
 }
+
+func Test_PoolExceedMaxNew(t *testing.T) {
+	p := Pool[int]{
+		New:    func() int { return 0 },
+		Debug:  true,
+		MaxNew: 2,
+	}
+
+	defer func() {
+		if err := recover(); err == nil {
+			t.Errorf("should panic")
+		}
+	}()
+	p.Get()
+	p.Get()
+	p.Get()
+}

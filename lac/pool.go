@@ -11,6 +11,8 @@
 // 1. generic API
 // 2. no boxing
 // 3. support reserving.
+// 4. debug mode: leak detecting, duplicated put.
+// 5. max size: memory leak protection.
 
 package lac
 
@@ -20,12 +22,14 @@ import (
 )
 
 type Pool[T any] struct {
-	m     sync.Mutex
-	New   func() T
-	pool  []T
-	Max   int
-	Debug bool
-	Equal func(a, b T) bool
+	m      sync.Mutex
+	New    func() T
+	pool   []T
+	Max    int
+	MaxNew int
+	newCnt int
+	Debug  bool
+	Equal  func(a, b T) bool
 }
 
 func (p *Pool[T]) Get() T {
@@ -33,11 +37,20 @@ func (p *Pool[T]) Get() T {
 	defer p.m.Unlock()
 
 	if len(p.pool) == 0 {
-		return p.New()
+		p.newCnt++
+		return p.doNew()
 	}
 	r := p.pool[len(p.pool)-1]
 	p.pool = p.pool[:len(p.pool)-1]
 	return r
+}
+
+func (p *Pool[T]) doNew() T {
+	p.newCnt++
+	if p.Debug && p.MaxNew > 0 && p.newCnt > p.MaxNew {
+		panic("creates too many objects, potential memory leak?")
+	}
+	return p.New()
 }
 
 func (p *Pool[T]) Put(v T) {
@@ -70,6 +83,6 @@ func (p *Pool[T]) Reserve(cnt int) {
 
 	p.pool = make([]T, cnt)
 	for i := 0; i < cnt; i++ {
-		p.pool[i] = p.New()
+		p.pool[i] = p.doNew()
 	}
 }

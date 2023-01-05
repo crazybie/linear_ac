@@ -20,9 +20,10 @@ import (
 var BuildInAc = &Allocator{disabled: true}
 
 var acPool = Pool[*Allocator]{
-	New:   newLac,
-	Max:   MaxLac,
-	Equal: func(a, b *Allocator) bool { return a == b },
+	New:    newLac,
+	Max:    MaxLac,
+	Equal:  func(a, b *Allocator) bool { return a == b },
+	MaxNew: 20, // detect than user dot not call the Release or DecRef in debug mode.
 }
 
 func Get() *Allocator {
