@@ -32,7 +32,7 @@ func Test_PoolMemLeak(t *testing.T) {
 		Max: 1,
 	}
 	p.Put(1)
-	p.Put(1)
+	p.Put(2)
 	if len(p.pool) > 1 {
 		t.Errorf("memory leaked")
 	}

@@ -26,10 +26,11 @@ type Pool[T any] struct {
 	New    func() T
 	pool   []T
 	Max    int
-	MaxNew int
 	newCnt int
+
 	Debug  bool
-	Equal  func(a, b T) bool
+	MaxNew int               // require Debug=true
+	Equal  func(a, b T) bool // require Debug=true
 }
 
 func (p *Pool[T]) Get() T {
@@ -37,7 +38,6 @@ func (p *Pool[T]) Get() T {
 	defer p.m.Unlock()
 
 	if len(p.pool) == 0 {
-		p.newCnt++
 		return p.doNew()
 	}
 	r := p.pool[len(p.pool)-1]
