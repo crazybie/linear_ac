@@ -11,7 +11,6 @@ package lac
 
 import (
 	"reflect"
-	"sync"
 	"sync/atomic"
 	"unsafe"
 )
@@ -31,7 +30,7 @@ var chunkPool = Pool[chunk]{
 // Allocator
 
 type Allocator struct {
-	sync.Mutex
+	SpinLock
 
 	disabled       bool
 	chunks         []chunk

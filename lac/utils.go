@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -96,4 +97,20 @@ func checkMalloc(max uint64, f func()) {
 
 func sliceEqual[T any](a, b T) bool {
 	return (*sliceHeader)(unsafe.Pointer(&a)).Data == (*sliceHeader)(unsafe.Pointer(&b)).Data
+}
+
+//============================================================================
+// Spin lock
+//============================================================================
+
+type SpinLock int32
+
+func (s *SpinLock) Lock() {
+	for !atomic.CompareAndSwapInt32((*int32)(s), 0, 1) {
+		runtime.Gosched()
+	}
+}
+
+func (s *SpinLock) Unlock() {
+	atomic.StoreInt32((*int32)(s), 0)
 }

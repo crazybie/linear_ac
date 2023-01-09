@@ -70,7 +70,7 @@ func Dispatch(genTasks func(chan func(int))) {
 
 func Benchmark_Lac(t *testing.B) {
 	EnableDebugMode(false)
-	chunkPool.Reserve(1600)
+	ReserveChunkPool(256)
 	makeGlobalData()
 	runtime.GC()
 	t.StartTimer()

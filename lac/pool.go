@@ -18,11 +18,10 @@ package lac
 
 import (
 	"fmt"
-	"sync"
 )
 
 type Pool[T any] struct {
-	m      sync.Mutex
+	m      SpinLock
 	New    func() T
 	pool   []T
 	Max    int

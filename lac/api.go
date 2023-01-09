@@ -38,6 +38,13 @@ func (ac *Allocator) Release() {
 	acPool.Put(ac)
 }
 
+func ReserveChunkPool(sz int) {
+	if sz == 0 {
+		sz = DefaultChunks
+	}
+	chunkPool.Reserve(sz)
+}
+
 // IncRef should be used at outside the new goroutine, e.g.
 //
 //		ac.IncRef() // <- should be called outside the new goroutine.

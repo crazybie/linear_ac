@@ -142,6 +142,7 @@ func Benchmark_RawMallocSmall(t *testing.B) {
 
 func Benchmark_LacMallocSmall(t *testing.B) {
 	EnableDebugMode(false)
+	ReserveChunkPool(0)
 	runtime.GC()
 	ac := Get()
 
@@ -189,6 +190,7 @@ func Benchmark_RawMallocLarge(t *testing.B) {
 
 func Benchmark_LacMallocLarge(t *testing.B) {
 	EnableDebugMode(false)
+	ReserveChunkPool(0)
 	runtime.GC()
 	ac := Get()
 
