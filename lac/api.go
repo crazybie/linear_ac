@@ -23,7 +23,7 @@ var acPool = Pool[*Allocator]{
 	New:    newLac,
 	Max:    MaxLac,
 	Equal:  func(a, b *Allocator) bool { return a == b },
-	MaxNew: 20, // detect than user dot not call the Release or DecRef in debug mode.
+	MaxNew: 20, // detect whether user call Release or DecRef correctly in debug mode.
 }
 
 func Get() *Allocator {
