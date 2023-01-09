@@ -83,17 +83,21 @@ Results from benchmark tests:
 ### GC overhead
 ![bench](./bench.png)
 
-### Allocation performance compared with v1.20 arena.
+### A simple test shows allocation performance compared with v1.20 arena.
 ```
 cpu: Intel(R) Core(TM) i7-10510U CPU @ 1.80GHz
+Benchmark_RawMallocLarge
+Benchmark_RawMallocLarge-8         30698             37284 ns/op
 Benchmark_LacMallocLarge
-Benchmark_LacMallocLarge-8         25328             42923 ns/op
+Benchmark_LacMallocLarge-8         35488             30761 ns/op
 Benchmark_ArenaMallocLarge
-Benchmark_ArenaMallocLarge-8       19467             60022 ns/op
+Benchmark_ArenaMallocLarge-8       23941             50173 ns/op
+Benchmark_RawMallocSmall
+Benchmark_RawMallocSmall-8       6701558             155.8 ns/op
 Benchmark_LacMallocSmall
-Benchmark_LacMallocSmall-8      11035862             109.7 ns/op
+Benchmark_LacMallocSmall-8      14319091             86.02 ns/op
 Benchmark_ArenaMallocSmall
-Benchmark_ArenaMallocSmall-8     7336266             165.0 ns/op
+Benchmark_ArenaMallocSmall-8     8912742             138.4 ns/op
 ```
 
 ### Latencies under extreme allocation pressure, compared with build-in allocator.  

@@ -125,6 +125,15 @@ func makeDataArena(ac *arena.Arena, i int) *PbDataEx {
 	return d
 }
 
+func Benchmark_RawMallocLarge(t *testing.B) {
+	runtime.GC()
+	t.StartTimer()
+	for i := 0; i < t.N; i++ {
+		_ = makeDataAc(nil, i)
+	}
+	t.StopTimer()
+}
+
 func Benchmark_LacMallocLarge(t *testing.B) {
 	EnableDebugMode(false)
 	runtime.GC()
@@ -137,8 +146,8 @@ func Benchmark_LacMallocLarge(t *testing.B) {
 	t.StartTimer()
 
 	ac.Release()
-	acPool.clear()
-	chunkPool.clear()
+	acPool.Clear()
+	chunkPool.Clear()
 }
 
 func Benchmark_ArenaMallocLarge(t *testing.B) {
@@ -150,6 +159,21 @@ func Benchmark_ArenaMallocLarge(t *testing.B) {
 	}
 	t.StopTimer()
 	ac.Free()
+}
+
+func Benchmark_RawMallocSmall(t *testing.B) {
+	runtime.GC()
+	var ac *Allocator
+
+	t.StartTimer()
+	for i := 0; i < t.N; i++ {
+		e := New[PbItem](ac)
+		e.Name = ac.String("a")
+		e.Class = ac.Int(1)
+		e.Id = ac.Int(2)
+		e.Active = ac.Bool(true)
+	}
+	t.StopTimer()
 }
 
 func Benchmark_LacMallocSmall(t *testing.B) {
