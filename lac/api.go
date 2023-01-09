@@ -38,14 +38,14 @@ func (ac *Allocator) Release() {
 	acPool.Put(ac)
 }
 
-//IncRef should be used at outside the new goroutine, e.g.
+// IncRef should be used at outside the new goroutine, e.g.
 //
-// 	ac.IncRef() // <- should be called outside the new goroutine.
-//  go func() {
-//		// ac.IncRef() <<<- incorrect usage.
-// 		defer ac.DecRef()
-//		....
-//	}()
+//		ac.IncRef() // <- should be called outside the new goroutine.
+//	 go func() {
+//			// ac.IncRef() <<<- incorrect usage.
+//			defer ac.DecRef()
+//			....
+//		}()
 //
 // not in the new goroutine, otherwise the execution of new goroutine may be delayed after the caller quit,
 // which may cause a UseAfterFree error.
@@ -58,8 +58,8 @@ func (ac *Allocator) IncRef() {
 	atomic.AddInt32(&ac.refCnt, 1)
 }
 
-// DecRef will put the ac back into pool if ref count reduced to zero.
-// If one DecRef call is missed causes the Lac not go back to pool, it will be recycled by GC later.
+// DecRef will put the ac back into Pool if ref count reduced to zero.
+// If one DecRef call is missed causes the Lac not go back to Pool, it will be recycled by GC later.
 // If more DecRef calls are called cause the ref cnt reduced to negative, panic in debug mode.
 func (ac *Allocator) DecRef() {
 	if ac == nil || ac.disabled {
@@ -84,21 +84,22 @@ func New[T any](ac *Allocator) (r *T) {
 	return ac.typedAlloc(reflect.TypeOf((*T)(nil)), unsafe.Sizeof(*r), true).(*T)
 }
 
-// NewFrom will cheat the escape analyser to alloc the src object on the stack, to reduce a heap allocation.
-// Useful to alloc an object using struct literal syntax:
+// NewFrom will cheat the escape analyser to Alloc the src object on the stack, to reduce a heap allocation.
+// Useful to Alloc an object using struct literal syntax:
 //
-// 		obj := lac.NewFrom(ac, &SomeData{
-//			Field1: Value1,
-//			Field2: Value2,
-//		})
+//	obj := lac.NewFrom(ac, &SomeData{
+//		Field1: Value1,
+//		Field2: Value2,
+//	})
 //
 // This is a bit clearer than the following `new` syntax:
 //
-//		obj := lac.New[SomeData](ac)
-//		obj.Field1 = Value1
-//		obj.Field2 = Value2
+//	obj := lac.New[SomeData](ac)
+//	obj.Field1 = Value1
+//	obj.Field2 = Value2
 //
-// and also helpful for migrating struct literal code to using Lac.
+// Also helpful for migrating struct literal code to using Lac.
+// Since this function does not zero the memory it is a bit faster than New() for large object types.
 func NewFrom[T any](ac *Allocator, src *T) *T {
 	v := noEscape(src).(*T)
 	if ac == nil || ac.disabled {

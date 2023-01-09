@@ -68,7 +68,7 @@ func Dispatch(genTasks func(chan func(int))) {
 	fmt.Printf(">> Latency: max=%vms, avg=%vms.\n", maxLatency/1000/1000, totalLatency/cnt/1000/1000)
 }
 
-func Benchmark_LinearAc(t *testing.B) {
+func Benchmark_Lac(t *testing.B) {
 	EnableDebugMode(false)
 	chunkPool.Reserve(1600)
 	makeGlobalData()
