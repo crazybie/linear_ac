@@ -125,42 +125,6 @@ func makeDataArena(ac *arena.Arena, i int) *PbDataEx {
 	return d
 }
 
-func Benchmark_RawMallocLarge(t *testing.B) {
-	runtime.GC()
-	t.StartTimer()
-	for i := 0; i < t.N; i++ {
-		_ = makeDataAc(nil, i)
-	}
-	t.StopTimer()
-}
-
-func Benchmark_LacMallocLarge(t *testing.B) {
-	EnableDebugMode(false)
-	runtime.GC()
-	ac := Get()
-
-	t.StartTimer()
-	for i := 0; i < t.N; i++ {
-		_ = makeDataAc(ac, i)
-	}
-	t.StartTimer()
-
-	ac.Release()
-	acPool.Clear()
-	chunkPool.Clear()
-}
-
-func Benchmark_ArenaMallocLarge(t *testing.B) {
-	runtime.GC()
-	ac := arena.NewArena()
-	t.StartTimer()
-	for i := 0; i < t.N; i++ {
-		_ = makeDataArena(ac, i)
-	}
-	t.StopTimer()
-	ac.Free()
-}
-
 func Benchmark_RawMallocSmall(t *testing.B) {
 	runtime.GC()
 	var ac *Allocator
@@ -211,5 +175,41 @@ func Benchmark_ArenaMallocSmall(t *testing.B) {
 	}
 	t.StopTimer()
 
+	ac.Free()
+}
+
+func Benchmark_RawMallocLarge(t *testing.B) {
+	runtime.GC()
+	t.StartTimer()
+	for i := 0; i < t.N; i++ {
+		_ = makeDataAc(nil, i)
+	}
+	t.StopTimer()
+}
+
+func Benchmark_LacMallocLarge(t *testing.B) {
+	EnableDebugMode(false)
+	runtime.GC()
+	ac := Get()
+
+	t.StartTimer()
+	for i := 0; i < t.N; i++ {
+		_ = makeDataAc(ac, i)
+	}
+	t.StartTimer()
+
+	ac.Release()
+	acPool.Clear()
+	chunkPool.Clear()
+}
+
+func Benchmark_ArenaMallocLarge(t *testing.B) {
+	runtime.GC()
+	ac := arena.NewArena()
+	t.StartTimer()
+	for i := 0; i < t.N; i++ {
+		_ = makeDataArena(ac, i)
+	}
+	t.StopTimer()
 	ac.Free()
 }
