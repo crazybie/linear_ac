@@ -60,9 +60,18 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 		shared = true
 	}
 
+	lock := false
 	if shared {
 		ac.Lock()
+		lock = true
 	}
+
+	// protect from panic.
+	defer func() {
+		if shared && lock {
+			ac.Unlock()
+		}
+	}()
 
 	if len(ac.chunks) == 0 {
 		ac.chunks = append(ac.chunks, chunkPool.Get())
@@ -102,6 +111,7 @@ start:
 
 	if shared {
 		ac.Unlock()
+		lock = false
 	}
 
 	ptr := unsafe.Add((*sliceHeader)(unsafe.Pointer(&cur)).Data, used)
