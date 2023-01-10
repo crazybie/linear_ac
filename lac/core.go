@@ -48,7 +48,7 @@ func newLac() *Allocator {
 	ac := &Allocator{
 		disabled: DisableLac,
 		refCnt:   1,
-		chunks:   make([]chunk, 0, 1),
+		chunks:   make([]chunk, 0, 4),
 	}
 	return ac
 }

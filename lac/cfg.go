@@ -13,7 +13,7 @@ var (
 	debugMode     = false
 	DisableLac    = false
 	ChunkSize     = 1 * 1024 * 1024 // larger request use the system allocator.
-	MaxChunks     = 5000            // chunks exceed this threshold will be returned to the runtime.
-	MaxLac        = 100000          // Lacs exceed this threshold will not be returned to the runtime.
-	DefaultChunks = 128
+	MaxChunks     = 2000            // chunks exceed this threshold will be returned to the runtime.
+	MaxLac        = 10000           // Lacs exceed this threshold will not be returned to the runtime.
+	DefaultChunks = 64
 )

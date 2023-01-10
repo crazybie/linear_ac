@@ -26,7 +26,18 @@ var acPool = Pool[*Allocator]{
 	MaxNew: 20, // detect whether user call Release or DecRef correctly in debug mode.
 }
 
+// ReserveChunkPool should be called at the startup of the application.
+func ReserveChunkPool(sz int) {
+	if sz == 0 {
+		sz = DefaultChunks
+	}
+	chunkPool.Reserve(sz)
+}
+
 func Get() *Allocator {
+	if DisableLac {
+		return nil
+	}
 	return acPool.Get()
 }
 
@@ -36,13 +47,6 @@ func (ac *Allocator) Release() {
 	}
 	ac.reset()
 	acPool.Put(ac)
-}
-
-func ReserveChunkPool(sz int) {
-	if sz == 0 {
-		sz = DefaultChunks
-	}
-	chunkPool.Reserve(sz)
 }
 
 // IncRef should be used at outside the new goroutine, e.g.
