@@ -38,3 +38,43 @@ func BenchmarkNewFrom(b *testing.B) {
 	}
 	runtime.KeepAlive(item)
 }
+
+func Benchmark_RawMalloc(t *testing.B) {
+	runtime.GC()
+
+	t.StartTimer()
+	var e *PbItem
+	for i := 0; i < t.N; i++ {
+		e = new(PbItem)
+		e.Name = new(string)
+		*e.Name = "a"
+		e.Class = new(int)
+		*e.Class = i
+		e.Id = new(int)
+		*e.Id = i + 10
+		e.Active = new(bool)
+		*e.Active = true
+	}
+	runtime.KeepAlive(e)
+	t.StopTimer()
+}
+
+func Benchmark_LacMalloc(t *testing.B) {
+	EnableDebugMode(false)
+	ReserveChunkPool(0)
+	runtime.GC()
+	ac := Get()
+
+	t.StartTimer()
+	var e *PbItem
+	for i := 0; i < t.N; i++ {
+		e = NewFrom(ac, &PbItem{
+			Name:   ac.String("a"),
+			Class:  ac.Int(i),
+			Id:     ac.Int(i + 10),
+			Active: ac.Bool(true),
+		})
+	}
+	runtime.KeepAlive(e)
+	t.StopTimer()
+}

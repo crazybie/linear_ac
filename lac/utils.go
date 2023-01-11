@@ -70,9 +70,11 @@ func memmoveNoHeapPointers(to, from unsafe.Pointer, n uintptr)
 // WARNING:
 // it's danger to mark the must-escaped value as noEscape,
 // for example mark a pointer returned from a function that points to the function's stack object as noEscape.
-func noEscape(p any) (ret any) {
-	*(*[2]uintptr)(unsafe.Pointer(&ret)) = *(*[2]uintptr)(unsafe.Pointer(&p))
-	return
+//
+//go:nosplit
+func noEscape[T any](p *T) *T {
+	x := uintptr(unsafe.Pointer(p))
+	return (*T)(unsafe.Pointer(x ^ 0))
 }
 
 func data(i interface{}) unsafe.Pointer {
@@ -101,8 +103,14 @@ func checkMalloc(max uint64, f func()) {
 	}
 }
 
-func sliceEqual[T any](a, b T) bool {
-	return (*sliceHeader)(unsafe.Pointer(&a)).Data == (*sliceHeader)(unsafe.Pointer(&b)).Data
+func resetSlice[T any](s []T) []T {
+	c := cap(s)
+	s = s[:c]
+	var zero T
+	for i := 0; i < c; i++ {
+		s[i] = zero
+	}
+	return s[:0]
 }
 
 //============================================================================

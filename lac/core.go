@@ -31,11 +31,10 @@ var chunkPool = Pool[*sliceHeader]{
 // Allocator
 
 type Allocator struct {
-	disabled   bool
-	chunks     []*sliceHeader
-	chunksLock SpinLock
-	curChunk   unsafe.Pointer //*sliceHeader
-	refCnt     int32
+	disabled bool
+	chunks   []*sliceHeader
+	curChunk unsafe.Pointer //*sliceHeader
+	refCnt   int32
 
 	externalPtr        []unsafe.Pointer
 	externalPtrLock    SpinLock
@@ -53,6 +52,7 @@ func newLac() *Allocator {
 	ac := &Allocator{
 		disabled: DisableLac,
 		refCnt:   1,
+		chunks:   make([]*sliceHeader, 0, 4),
 	}
 	return ac
 }
@@ -60,7 +60,7 @@ func newLac() *Allocator {
 // alloc use lock-free algorithm to avoid locking.
 func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 	needAligned := (need + PtrSize + 1) & ^(PtrSize - 1)
-	var header *sliceHeader
+	var header, new_ *sliceHeader
 	var len_, cap_ int64
 
 	for {
@@ -68,33 +68,24 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 		if cur != nil {
 			header = (*sliceHeader)(cur)
 			len_ = atomic.LoadInt64(&header.Len)
-			cap_ = atomic.LoadInt64(&header.Cap)
+			cap_ = header.Cap
 		}
 
 		if len_+int64(needAligned) > cap_ {
-			var new_ *sliceHeader
-			fromPool := true
 			if needAligned > ChunkSize {
-				// this heap object may be wasted due to the cas failure.
-				// this is where wait-free algo is better.
 				t := make(chunk, 0, need)
 				new_ = (*sliceHeader)(unsafe.Pointer(&t))
-				fromPool = false
 			} else {
 				new_ = chunkPool.Get()
 			}
 			if atomic.CompareAndSwapPointer(&ac.curChunk, cur, unsafe.Pointer(new_)) {
-				ac.chunksLock.Lock()
 				ac.chunks = append(ac.chunks, new_)
-				ac.chunksLock.Unlock()
-			} else {
-				if fromPool {
-					chunkPool.Put(new_)
-				}
+			} else if new_.Cap == int64(ChunkSize) {
+				chunkPool.Put(new_)
 			}
 		} else {
 			if atomic.CompareAndSwapInt64(&header.Len, len_, len_+int64(needAligned)) {
-				ptr := unsafe.Add(atomic.LoadPointer(&header.Data), len_)
+				ptr := unsafe.Add(header.Data, len_)
 				if zero {
 					memclrNoHeapPointers(ptr, uintptr(needAligned))
 				}
@@ -128,17 +119,14 @@ func (ac *Allocator) reset() {
 	}
 
 	// clear all ref
-	ac.chunks = ac.chunks[:cap(ac.chunks)]
-	for i := 0; i < cap(ac.chunks); i++ {
-		ac.chunks[i] = nil
-	}
-	ac.chunks = ac.chunks[:0]
+	ac.chunks = resetSlice(ac.chunks)
 	ac.curChunk = nil
 
 	// clear externals
-	ac.externalPtr = nil
-	ac.externalSlice = nil
-	ac.externalMap = nil
+	ac.externalPtr = ac.externalPtr[:0]
+	ac.externalSlice = ac.externalSlice[:0]
+	ac.externalMap = ac.externalMap[:0]
+	ac.externalString = ac.externalString[:0]
 
 	ac.disabled = DisableLac
 	atomic.StoreInt32(&ac.refCnt, 1)

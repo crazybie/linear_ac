@@ -34,9 +34,9 @@ func Test_NoEscape(t *testing.T) {
 	var v interface{}
 	noMalloc(func() {
 		i := 1
-		v = noEscape(i)
-		v = noEscape(s)
-		v = noEscape(m)
+		v = noEscape(&i)
+		v = noEscape(&s)
+		v = noEscape(&m)
 	})
 	runtime.KeepAlive(v)
 }

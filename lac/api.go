@@ -112,7 +112,7 @@ func New[T any](ac *Allocator) (r *T) {
 // Also helpful for migrating struct literal code to using Lac.
 // Since this function does not zero the memory it is a bit faster than New() for large object types.
 func NewFrom[T any](ac *Allocator, src *T) *T {
-	v := noEscape(src).(*T)
+	v := noEscape(src)
 	if ac == nil || ac.disabled {
 		// since the v is stack allocated due to noEscape, migrate it to heap.
 		r := new(T)
