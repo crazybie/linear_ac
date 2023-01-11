@@ -31,10 +31,16 @@ var (
 
 const PtrSize = int(unsafe.Sizeof(uintptr(0)))
 
+func init() {
+	if PtrSize != 8 {
+		panic("expect 64bit platform")
+	}
+}
+
 type sliceHeader struct {
 	Data unsafe.Pointer
-	Len  int
-	Cap  int
+	Len  int64
+	Cap  int64
 }
 
 type stringHeader struct {

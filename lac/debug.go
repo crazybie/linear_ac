@@ -23,13 +23,6 @@ import (
 var diagnosisChunkPool = sync.Pool{}
 
 func EnableDebugMode(v bool) {
-	// use more chunks in debug mode to help diagnosis bugs.
-	if v {
-		ChunkSize /= 8
-	} else if debugMode {
-		ChunkSize *= 8
-	}
-
 	debugMode = v
 	acPool.Debug = v
 	chunkPool.Debug = v
@@ -65,9 +58,8 @@ func (ac *Allocator) checkPointerType(addr uintptr) PointerType {
 		return PointerTypeLacInternal
 	}
 
-	for _, c := range ac.chunks {
-		h := (*reflect.SliceHeader)(unsafe.Pointer(&c))
-		if addr >= h.Data && addr < h.Data+uintptr(h.Cap) {
+	for _, h := range ac.chunks {
+		if addr >= uintptr(h.Data) && addr < uintptr(h.Data)+uintptr(h.Cap) {
 			return PointerTypeLacInternal
 		}
 	}

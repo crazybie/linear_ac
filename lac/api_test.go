@@ -12,6 +12,8 @@ package lac
 import (
 	"fmt"
 	"runtime"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"unsafe"
 )
@@ -216,9 +218,11 @@ func Test_NewFrom(b *testing.T) {
 }
 
 func Test_NewFromNoAlloc(b *testing.T) {
-	chunkPool.Reserve(1)
 	ac := Get()
 	defer ac.Release()
+
+	// warm-up
+	ac.alloc(1, false)
 
 	var r *PbItem
 	noMalloc(func() {
@@ -357,9 +361,11 @@ func Test_SliceAppendStructValue(t *testing.T) {
 }
 
 func Test_AppendNoMallocSimple(t *testing.T) {
-	chunkPool.Reserve(1)
 	ac := Get()
 	defer ac.Release()
+	// warm-up
+	ac.alloc(1, false)
+
 	s := []int{1}
 	noMalloc(func() {
 		s = Append(ac, s, 2)
@@ -370,9 +376,11 @@ func Test_AppendNoMallocSimple(t *testing.T) {
 }
 
 func Test_AppendNoMalloc(t *testing.T) {
-	chunkPool.Reserve(1)
 	ac := Get()
 	defer ac.Release()
+
+	// warm-up
+	ac.alloc(1, false)
 
 	m := map[int][]int{}
 	// init map buckets
@@ -451,4 +459,35 @@ func Test_SliceWrongCap(t *testing.T) {
 	ac := Get()
 	defer ac.Release()
 	NewSlice[byte](ac, 10, 0)
+}
+
+// NOTE: run with "-race".
+func TestSharedAc_NoRace(t *testing.T) {
+	ac := Get()
+	wg := sync.WaitGroup{}
+	wg.Add(100)
+
+	for i := 0; i < 100; i++ {
+		ac.IncRef()
+		go func() {
+
+			var item *PbItem
+			for j := 0; j < 1000; j++ {
+				item = New[PbItem](ac)
+				item.Class = Attach(ac, new(int))
+				*item.Class = j
+				item.Id = ac.Int(j)
+			}
+			runtime.KeepAlive(item)
+
+			ac.DecRef()
+			wg.Done()
+		}()
+	}
+
+	ac.DecRef()
+	wg.Wait()
+	if n := atomic.LoadInt32(&ac.refCnt); n != 1 {
+		t.Errorf("ref cnt:%v", n)
+	}
 }

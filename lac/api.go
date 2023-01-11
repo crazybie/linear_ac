@@ -138,8 +138,8 @@ func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
 	slice := (*sliceHeader)(unsafe.Pointer(&r))
 	var t T
 	slice.Data = ac.alloc(cap*int(unsafe.Sizeof(t)), false)
-	slice.Len = len
-	slice.Cap = cap
+	slice.Len = int64(len)
+	slice.Cap = int64(cap)
 	return r
 }
 
@@ -157,12 +157,12 @@ func Append[T any](ac *Allocator, s []T, v T) []T {
 		if h.Cap == 0 {
 			h.Cap = 4
 		}
-		h.Data = ac.alloc(h.Cap*elemSz, false)
-		memmoveNoHeapPointers(h.Data, pre.Data, uintptr(pre.Len*elemSz))
+		h.Data = ac.alloc(int(h.Cap)*elemSz, false)
+		memmoveNoHeapPointers(h.Data, pre.Data, uintptr(int(pre.Len)*elemSz))
 	}
 	// append
 	if h.Len < h.Cap {
-		memmoveNoHeapPointers(unsafe.Add(h.Data, elemSz*h.Len), unsafe.Pointer(&v), uintptr(elemSz))
+		memmoveNoHeapPointers(unsafe.Add(h.Data, elemSz*int(h.Len)), unsafe.Pointer(&v), uintptr(elemSz))
 		h.Len++
 	}
 	return s
