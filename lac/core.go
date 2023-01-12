@@ -36,6 +36,9 @@ type Allocator struct {
 	curChunk unsafe.Pointer //*sliceHeader
 	refCnt   int32
 
+	// NOTE:
+	// To keep these externals alive, slices must be alloc from raw allocator to make them
+	// available to the GC.
 	externalPtr        []unsafe.Pointer
 	externalPtrLock    SpinLock
 	externalSlice      []unsafe.Pointer
