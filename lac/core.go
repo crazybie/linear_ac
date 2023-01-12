@@ -38,7 +38,7 @@ type Allocator struct {
 
 	// NOTE:
 	// To keep these externals alive, slices must be alloc from raw allocator to make them
-	// available to the GC.
+	// available to the GC. never alloc them from Lac itself.
 	externalPtr        []unsafe.Pointer
 	externalPtrLock    SpinLock
 	externalSlice      []unsafe.Pointer
