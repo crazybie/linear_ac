@@ -385,7 +385,7 @@ func Test_AppendNoMalloc(t *testing.T) {
 	m := map[int][]int{}
 	// init map buckets
 	for i := 0; i < 10; i++ {
-		m[i] = nil
+		m[i] = []int{}
 	}
 
 	noMalloc(func() {
