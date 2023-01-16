@@ -183,7 +183,8 @@ func Benchmark_RawMallocLarge(t *testing.B) {
 	runtime.GC()
 	t.StartTimer()
 	for i := 0; i < t.N; i++ {
-		_ = makeDataAc(nil, i)
+		e := makeDataAc(nil, i)
+		runtime.KeepAlive(e)
 	}
 	t.StopTimer()
 }
@@ -196,7 +197,8 @@ func Benchmark_LacMallocLarge(t *testing.B) {
 
 	t.StartTimer()
 	for i := 0; i < t.N; i++ {
-		_ = makeDataAc(ac, i)
+		e := makeDataAc(ac, i)
+		runtime.KeepAlive(e)
 	}
 	t.StartTimer()
 
@@ -210,7 +212,8 @@ func Benchmark_ArenaMallocLarge(t *testing.B) {
 	ac := arena.NewArena()
 	t.StartTimer()
 	for i := 0; i < t.N; i++ {
-		_ = makeDataArena(ac, i)
+		e := makeDataArena(ac, i)
+		runtime.KeepAlive(e)
 	}
 	t.StopTimer()
 	ac.Free()
