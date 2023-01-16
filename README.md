@@ -80,33 +80,81 @@ func main() {
 ## Benchmarks
 Results from benchmark tests:
 
-### GC overhead
-![bench](./bench.png)
+### Linux
+- go test -bench . -benchmem
 
-### A simple test shows allocation performance compared with v1.20 arena.
+
 ```
+goos: linux
+goarch: amd64
+pkg: oops/lib/linear_ac/lac
+cpu: Intel(R) Core(TM) i5-8500 CPU @ 3.00GHz
+BenchmarkNew-6                   2655375               474.3 ns/op           185 B/op          0 allocs/op
+BenchmarkNewFrom-6               3093921               476.7 ns/op           147 B/op          0 allocs/op
+Benchmark_RawMalloc-6           10047429               106.1 ns/op            88 B/op          5 allocs/op
+Benchmark_LacMalloc-6           14244061               115.0 ns/op           128 B/op          0 allocs/op
+Benchmark_RawMallocLarge2-6        27825             40892 ns/op           27496 B/op       1656 allocs/op
+Benchmark_LacMallocLarge2-6        51686             24068 ns/op           39583 B/op          0 allocs/op
+PASS
+```
+
+- go test -bench . -tags=goexperiment.arenas -benchmem
+
+(A simple test shows allocation performance compared with v1.20 arena)
+
+```
+goos: linux
+goarch: amd64
+pkg: oops/lib/linear_ac/lac
+cpu: Intel(R) Core(TM) i5-8500 CPU @ 3.00GHz
+BenchmarkNew-6                   2663191               459.9 ns/op           184 B/op          0 allocs/op
+BenchmarkNewFrom-6               2989390               473.0 ns/op           149 B/op          0 allocs/op
+Benchmark_RawMalloc-6           10412677               105.6 ns/op            88 B/op          5 allocs/op
+Benchmark_LacMalloc-6           14276998               114.6 ns/op           128 B/op          0 allocs/op
+Benchmark_RawMallocLarge2-6        26142             40217 ns/op           27496 B/op       1656 allocs/op
+Benchmark_LacMallocLarge2-6        50194             24815 ns/op           39590 B/op          0 allocs/op
+Benchmark_RawMallocSmall-6      10188718               178.4 ns/op            88 B/op          5 allocs/op
+Benchmark_LacMallocSmall-6      13542043                90.15 ns/op          128 B/op          0 allocs/op
+Benchmark_ArenaMallocSmall-6    12588194                94.69 ns/op           87 B/op          0 allocs/op
+Benchmark_RawMallocLarge-6         31762             35838 ns/op           27496 B/op       1656 allocs/op
+Benchmark_LacMallocLarge-6         50337             26381 ns/op           39582 B/op          0 allocs/op
+Benchmark_ArenaMallocLarge-6       36783             30900 ns/op           26634 B/op         45 allocs/op
+
+```
+
+### Windows
+- go test -bench . -benchmem
+
+```
+goos: windows
+goarch: amd64
+pkg: linear_ac/lac
 cpu: Intel(R) Core(TM) i7-10510U CPU @ 1.80GHz
-Benchmark_RawMallocSmall
-Benchmark_RawMallocSmall-8       8049346               159.2 ns/op
-Benchmark_LacMallocSmall
-Benchmark_LacMallocSmall-8      10938076                96.29 ns/op
-Benchmark_ArenaMallocSmall
-Benchmark_ArenaMallocSmall-8     9400137               136.4 ns/op
-Benchmark_RawMallocLarge
-Benchmark_RawMallocLarge-8         35022             34329 ns/op
-Benchmark_LacMallocLarge
-Benchmark_LacMallocLarge-8         51916             25429 ns/op
-Benchmark_ArenaMallocLarge
-Benchmark_ArenaMallocLarge-8       26605             48399 ns/op
-```
+BenchmarkNew-8                   2388756               569.3 ns/op           197 B/op          0 allocs/op
+BenchmarkNewFrom-8               2584728               552.0 ns/op           138 B/op          0 allocs/op
+Benchmark_RawMalloc-8            9610574               125.9 ns/op            88 B/op          5 allocs/op
+Benchmark_LacMalloc-8           10282324               114.4 ns/op           128 B/op          0 allocs/op
+Benchmark_RawMallocLarge2-8        23122             47686 ns/op           27496 B/op       1656 allocs/op
+Benchmark_LacMallocLarge2-8        42115             27730 ns/op           39590 B/op          0 allocs/op
 
-### Latencies under extreme allocation pressure, compared with build-in allocator.  
-``` 
-BenchmarkLatencyLac
->> Latency: max=1390ms, avg=3ms.
-BenchmarkLatencyLac-8                  1        4008866700 ns/op
-BenchmarkLatencyRaw
->> Latency: max=3155ms, avg=7ms.
-BenchmarkLatencyRaw-8                  1        4687060600 ns/op
 ```
+- go test -bench . -tags='goexperiment.arenas' -benchmem
+```
+goos: windows
+goarch: amd64
+pkg: linear_ac/lac
+cpu: Intel(R) Core(TM) i7-10510U CPU @ 1.80GHz
+BenchmarkNew-8                   2632837               499.3 ns/op           186 B/op          0 allocs/op
+BenchmarkNewFrom-8               2989316               493.2 ns/op           149 B/op          0 allocs/op
+Benchmark_RawMalloc-8            9782223               123.4 ns/op            88 B/op          5 allocs/op
+Benchmark_LacMalloc-8           10231971               115.1 ns/op           128 B/op          0 allocs/op
+Benchmark_RawMallocLarge2-8        27981             37875 ns/op           27496 B/op       1656 allocs/op
+Benchmark_LacMallocLarge2-8        41592             29860 ns/op           39584 B/op          0 allocs/op
+Benchmark_RawMallocSmall-8       7730782               147.3 ns/op            88 B/op          5 allocs/op
+Benchmark_LacMallocSmall-8      12129996                92.38 ns/op          128 B/op          0 allocs/op
+Benchmark_ArenaMallocSmall-8     8912542               134.0 ns/op            88 B/op          0 allocs/op
+Benchmark_RawMallocLarge-8         33466             39580 ns/op           27496 B/op       1656 allocs/op
+Benchmark_LacMallocLarge-8         41583             27847 ns/op           39592 B/op          0 allocs/op
+Benchmark_ArenaMallocLarge-8       25872             49512 ns/op           26549 B/op         45 allocs/op
 
+```
