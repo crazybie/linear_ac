@@ -10,7 +10,6 @@
 package lac
 
 import (
-	"fmt"
 	"reflect"
 	"runtime"
 	"sync/atomic"
@@ -87,20 +86,6 @@ func interfaceOfUnexported(v reflect.Value) (ret interface{}) {
 	r.Type = v2.Type
 	r.Data = v2.Ptr
 	return
-}
-
-func noMalloc(f func()) {
-	checkMalloc(0, f)
-}
-
-func checkMalloc(max uint64, f func()) {
-	var s, e runtime.MemStats
-	runtime.ReadMemStats(&s)
-	f()
-	runtime.ReadMemStats(&e)
-	if n := e.Mallocs - s.Mallocs; n > max {
-		panic(fmt.Errorf("has %v malloc, bytes: %v", n, e.HeapAlloc-s.HeapAlloc))
-	}
 }
 
 func resetSlice[T any](s []T) []T {

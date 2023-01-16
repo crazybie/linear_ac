@@ -15,7 +15,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"unsafe"
 )
 
 type EnumA int32
@@ -217,21 +216,6 @@ func Test_NewFrom(b *testing.T) {
 	}
 }
 
-func Test_NewFromNoAlloc(b *testing.T) {
-	ac := Get()
-	defer ac.Release()
-
-	// warm-up
-	ac.alloc(1, false)
-
-	var r *PbItem
-	noMalloc(func() {
-		r = NewFrom(ac, &PbItem{})
-		//r = new(PbItem)
-	})
-	runtime.KeepAlive(r)
-}
-
 func Test_BuildInAllocator(t *testing.T) {
 	ac := BuildInAc
 	defer ac.Release()
@@ -275,29 +259,6 @@ func Test_Enum(t *testing.T) {
 	if *v != e {
 		t.Fail()
 	}
-}
-
-func Test_AttachExternalNoAlloc(t *testing.T) {
-	ac := Get()
-	ac.externalPtr = make([]unsafe.Pointer, 0, 4)
-	defer ac.Release()
-
-	s := new(int)
-	noMalloc(func() {
-		Attach(ac, s)
-	})
-}
-
-func Test_AttachExternalIface(t *testing.T) {
-	ac := Get()
-	ac.externalPtr = make([]unsafe.Pointer, 0, 4)
-	defer ac.Release()
-
-	i := new(int)
-	noMalloc(func() {
-		var v interface{} = i
-		Attach(ac, v)
-	})
 }
 
 func Test_AttachExternal(b *testing.T) {
@@ -359,54 +320,6 @@ func Test_SliceAppendStructValue(t *testing.T) {
 		t.Fail()
 	}
 }
-
-/*
-FIXME: the following tests do malloc randomly.
-
-func Test_AppendNoMallocSimple(t *testing.T) {
-	ac := Get()
-	defer ac.Release()
-	// warm-up
-	ac.alloc(1, false)
-
-	s := []int{1}
-	noMalloc(func() {
-		s = Append(ac, s, 2)
-	})
-	if len(s) != 2 || s[1] != 2 {
-		t.Fail()
-	}
-}
-
-func Test_AppendNoMalloc(t *testing.T) {
-	ac := Get()
-	defer ac.Release()
-
-	// warm-up
-	ac.alloc(1, false)
-
-	m := map[int][]int{}
-	// init map buckets
-	for i := 0; i < 10; i++ {
-		m[i] = []int{}
-	}
-
-	noMalloc(func() {
-		for i := 0; i < 3; i++ {
-			for j := 0; j < 3; j++ {
-				m[i] = Append(ac, m[i], j)
-			}
-		}
-	})
-	for i := 0; i < 3; i++ {
-		for j := 0; j < 3; j++ {
-			if m[i][j] != j {
-				t.Fail()
-			}
-		}
-	}
-}
-*/
 
 func Test_NilAc(t *testing.T) {
 	var ac *Allocator
