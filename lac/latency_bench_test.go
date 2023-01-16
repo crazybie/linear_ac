@@ -86,8 +86,9 @@ func BenchmarkLatencyLac(t *testing.B) {
 
 				for n := 0; n < subLoop; n++ {
 					ac := Get()
-					_ = makeDataAc(ac, n)
+					e := makeDataAc(ac, n)
 					ac.Release()
+					runtime.KeepAlive(e)
 				}
 			}
 		}

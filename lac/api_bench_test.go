@@ -64,6 +64,7 @@ func Benchmark_LacMalloc(t *testing.B) {
 	ReserveChunkPool(0)
 	runtime.GC()
 	ac := Get()
+	defer ac.Release()
 
 	t.StartTimer()
 	var e *PbItem
