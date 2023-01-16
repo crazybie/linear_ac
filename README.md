@@ -102,11 +102,11 @@ Benchmark_ArenaMallocLarge-8       26605             48399 ns/op
 
 ### Latencies under extreme allocation pressure, compared with build-in allocator.  
 ``` 
-Benchmark_LinearAc
->> Latency: max=944ms, avg=6ms.
-Benchmark_LinearAc-8                   1        9589733200 ns/op
-Benchmark_buildInAc
->> Latency: max=3535ms, avg=7ms.
-Benchmark_buildInAc-8                  1        7651476400 ns/op
+BenchmarkLatencyLac
+>> Latency: max=1390ms, avg=3ms.
+BenchmarkLatencyLac-8                  1        4008866700 ns/op
+BenchmarkLatencyRaw
+>> Latency: max=3155ms, avg=7ms.
+BenchmarkLatencyRaw-8                  1        4687060600 ns/op
 ```
 
