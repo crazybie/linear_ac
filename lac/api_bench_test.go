@@ -79,3 +79,31 @@ func Benchmark_LacMalloc(t *testing.B) {
 	runtime.KeepAlive(e)
 	t.StopTimer()
 }
+
+func Benchmark_RawMallocLarge2(t *testing.B) {
+	runtime.GC()
+	t.StartTimer()
+	for i := 0; i < t.N; i++ {
+		e := makeDataAc(nil, i)
+		runtime.KeepAlive(e)
+	}
+	t.StopTimer()
+}
+
+func Benchmark_LacMallocLarge2(t *testing.B) {
+	EnableDebugMode(false)
+	ReserveChunkPool(0)
+	runtime.GC()
+	ac := Get()
+
+	t.StartTimer()
+	for i := 0; i < t.N; i++ {
+		e := makeDataAc(ac, i)
+		runtime.KeepAlive(e)
+	}
+	t.StartTimer()
+
+	ac.Release()
+	acPool.Clear()
+	chunkPool.Clear()
+}
