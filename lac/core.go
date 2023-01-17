@@ -158,10 +158,10 @@ func (ac *Allocator) reset() {
 	ac.curChunk = nil
 
 	// clear externals
-	ac.externalPtr = ac.externalPtr[:0]
-	ac.externalSlice = ac.externalSlice[:0]
-	ac.externalMap = ac.externalMap[:0]
-	ac.externalString = ac.externalString[:0]
+	ac.externalPtr = nil
+	ac.externalSlice = nil
+	ac.externalMap = nil
+	ac.externalString = nil
 
 	ac.disabled = DisableLac
 	atomic.StoreInt32(&ac.refCnt, 1)
@@ -181,23 +181,23 @@ func (ac *Allocator) keepAlive(ptr interface{}) {
 	switch reflect.TypeOf(ptr).Kind() {
 	case reflect.Ptr:
 		ac.externalPtrLock.Lock()
+		defer ac.externalPtrLock.Unlock()
 		ac.externalPtr = append(ac.externalPtr, d)
-		ac.externalPtrLock.Unlock()
 	case reflect.Slice:
 		ac.externalSliceLock.Lock()
+		defer ac.externalSliceLock.Unlock()
 		ac.externalSlice = append(ac.externalSlice, (*sliceHeader)(d).Data)
-		ac.externalSliceLock.Unlock()
 	case reflect.String:
 		ac.externalStringLock.Lock()
+		defer ac.externalStringLock.Unlock()
 		ac.externalString = append(ac.externalString, (*stringHeader)(d).Data)
-		ac.externalStringLock.Unlock()
 	case reflect.Map:
 		ac.externalMapLock.Lock()
+		defer ac.externalMapLock.Unlock()
 		ac.externalMap = append(ac.externalMap, d)
-		ac.externalMapLock.Unlock()
 	case reflect.Func:
 		ac.externalPtrLock.Lock()
+		defer ac.externalPtrLock.Unlock()
 		ac.externalPtr = append(ac.externalPtr, reflect.ValueOf(ptr).UnsafePointer())
-		ac.externalPtrLock.Unlock()
 	}
 }

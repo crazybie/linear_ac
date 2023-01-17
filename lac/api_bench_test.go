@@ -196,12 +196,11 @@ func Benchmark_LacMalloc(t *testing.B) {
 	t.StartTimer()
 	var e *PbItem
 	for i := 0; i < t.N; i++ {
-		e = NewFrom(ac, &PbItem{
-			Name:   ac.String("a"),
-			Class:  ac.Int(i),
-			Id:     ac.Int(i + 10),
-			Active: ac.Bool(true),
-		})
+		e = New[PbItem](ac)
+		e.Name = ac.String("a")
+		e.Class = ac.Int(i)
+		e.Id = ac.Int(i + 10)
+		e.Active = ac.Bool(true)
 	}
 	runtime.KeepAlive(e)
 	t.StopTimer()

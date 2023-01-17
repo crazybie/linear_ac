@@ -92,6 +92,7 @@ func New[T any](ac *Allocator) (r *T) {
 	if ac == nil || ac.disabled {
 		return new(T)
 	}
+
 	r = (*T)(ac.alloc(int(unsafe.Sizeof(*r)), true))
 	if debugMode {
 		if reflect.TypeOf(r).Elem().Kind() == reflect.Struct {
@@ -101,8 +102,8 @@ func New[T any](ac *Allocator) (r *T) {
 	return r
 }
 
-// NewFrom will cheat the escape analyser to Alloc the src object on the stack, to reduce a heap allocation.
-// Useful to Alloc an object using struct literal syntax:
+// NewFrom will coy the src object from heap to lac thus slower than New due to the heap malloc of src.
+// It is useful to create an object using struct literal syntax and old-code migration:
 //
 //	obj := lac.NewFrom(ac, &SomeData{
 //		Field1: Value1,
@@ -114,20 +115,15 @@ func New[T any](ac *Allocator) (r *T) {
 //	obj := lac.New[SomeData](ac)
 //	obj.Field1 = Value1
 //	obj.Field2 = Value2
-//
-// Also helpful for migrating struct literal code to using Lac.
-// Since this function does not zero the memory it is a bit faster than New() for large object types.
 func NewFrom[T any](ac *Allocator, src *T) *T {
-	v := noEscape(src)
 	if ac == nil || ac.disabled {
-		// since the v is stack allocated due to noEscape, migrate it to heap.
-		r := new(T)
-		*r = *v
-		return r
+		return src
 	}
-	sz := unsafe.Sizeof(*v)
+
+	sz := unsafe.Sizeof(*src)
 	ret := (*T)(ac.alloc(int(sz), false))
-	memmoveNoHeapPointers(unsafe.Pointer(ret), unsafe.Pointer(v), sz)
+	memmoveNoHeapPointers(unsafe.Pointer(ret), unsafe.Pointer(src), sz)
+
 	if debugMode {
 		if reflect.TypeOf(ret).Elem().Kind() == reflect.Struct {
 			ac.debugScan(ret)

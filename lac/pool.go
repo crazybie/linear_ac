@@ -39,8 +39,12 @@ func (p *Pool[T]) Get() T {
 	if len(p.pool) == 0 {
 		return p.doNew()
 	}
-	r := p.pool[len(p.pool)-1]
-	p.pool = p.pool[:len(p.pool)-1]
+
+	last := len(p.pool) - 1
+	r := p.pool[last]
+	var zero T
+	p.pool[last] = zero
+	p.pool = p.pool[:last]
 	return r
 }
 

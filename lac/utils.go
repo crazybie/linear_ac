@@ -53,17 +53,6 @@ func memclrNoHeapPointers(ptr unsafe.Pointer, n uintptr)
 //go:noescape
 func memmoveNoHeapPointers(to, from unsafe.Pointer, n uintptr)
 
-// noEscape is to cheat the escape analyser to avoid heap alloc.
-// WARNING:
-// it's danger to mark the must-escaped value as noEscape,
-// for example mark a pointer returned from a function that points to the function's stack object as noEscape.
-//
-//go:nosplit
-func noEscape[T any](p *T) *T {
-	x := uintptr(unsafe.Pointer(p))
-	return (*T)(unsafe.Pointer(x ^ 0))
-}
-
 func data(i interface{}) unsafe.Pointer {
 	return (*emptyInterface)(unsafe.Pointer(&i)).Data
 }

@@ -189,6 +189,32 @@ func Test_NewSlice(t *testing.T) {
 	}
 }
 
+func Test_NewFromRaw(b *testing.T) {
+	var ac *Allocator
+
+	for i := 0; i < 3; i++ {
+		d := NewFrom(ac, &PbItem{
+			Id:    ac.Int(1 + i),
+			Class: ac.Int(2 + i),
+			Price: ac.Int(3 + i),
+			Name:  ac.String("test"),
+		})
+
+		if *d.Id != 1+i {
+			b.Fail()
+		}
+		if *d.Class != 2+i {
+			b.Fail()
+		}
+		if *d.Price != 3+i {
+			b.Fail()
+		}
+		if *d.Name != "test" {
+			b.Fail()
+		}
+	}
+}
+
 func Test_NewFrom(b *testing.T) {
 	ac := Get()
 	defer ac.Release()
