@@ -92,7 +92,13 @@ func New[T any](ac *Allocator) (r *T) {
 	if ac == nil || ac.disabled {
 		return new(T)
 	}
-	return ac.typedAlloc(reflect.TypeOf((*T)(nil)), unsafe.Sizeof(*r), true).(*T)
+	r = (*T)(ac.alloc(int(unsafe.Sizeof(*r)), true))
+	if debugMode {
+		if reflect.TypeOf(r).Elem().Kind() == reflect.Struct {
+			ac.debugScan(r)
+		}
+	}
+	return r
 }
 
 // NewFrom will cheat the escape analyser to Alloc the src object on the stack, to reduce a heap allocation.
@@ -119,8 +125,14 @@ func NewFrom[T any](ac *Allocator, src *T) *T {
 		*r = *v
 		return r
 	}
-	ret := ac.typedAlloc(reflect.TypeOf((*T)(nil)), unsafe.Sizeof(*v), false).(*T)
-	memmoveNoHeapPointers(data(ret), unsafe.Pointer(v), unsafe.Sizeof(*v))
+	sz := unsafe.Sizeof(*v)
+	ret := (*T)(ac.alloc(int(sz), false))
+	memmoveNoHeapPointers(unsafe.Pointer(ret), unsafe.Pointer(v), sz)
+	if debugMode {
+		if reflect.TypeOf(ret).Elem().Kind() == reflect.Struct {
+			ac.debugScan(ret)
+		}
+	}
 	return ret
 }
 
@@ -183,7 +195,7 @@ func NewEnum[T any](ac *Allocator, e T) *T {
 		*r = e
 		return r
 	}
-	r := ac.typedAlloc(reflect.TypeOf((*T)(nil)), unsafe.Sizeof(e), false).(*T)
+	r := (*T)(ac.alloc(int(unsafe.Sizeof(e)), false))
 	*r = e
 	return r
 }
@@ -220,7 +232,7 @@ func (ac *Allocator) Bool(v bool) (r *bool) {
 	if ac == nil || ac.disabled {
 		r = new(bool)
 	} else {
-		r = ac.typedAlloc(boolPtrType, unsafe.Sizeof(v), false).(*bool)
+		r = (*bool)(ac.alloc(int(unsafe.Sizeof(v)), false))
 	}
 	*r = v
 	return
@@ -230,7 +242,7 @@ func (ac *Allocator) Int(v int) (r *int) {
 	if ac == nil || ac.disabled {
 		r = new(int)
 	} else {
-		r = ac.typedAlloc(intPtrType, unsafe.Sizeof(v), false).(*int)
+		r = (*int)(ac.alloc(int(unsafe.Sizeof(v)), false))
 	}
 	*r = v
 	return
@@ -240,7 +252,7 @@ func (ac *Allocator) Int32(v int32) (r *int32) {
 	if ac == nil || ac.disabled {
 		r = new(int32)
 	} else {
-		r = ac.typedAlloc(i32PtrType, unsafe.Sizeof(v), false).(*int32)
+		r = (*int32)(ac.alloc(int(unsafe.Sizeof(v)), false))
 	}
 	*r = v
 	return
@@ -250,7 +262,7 @@ func (ac *Allocator) Uint32(v uint32) (r *uint32) {
 	if ac == nil || ac.disabled {
 		r = new(uint32)
 	} else {
-		r = ac.typedAlloc(u32PtrType, unsafe.Sizeof(v), false).(*uint32)
+		r = (*uint32)(ac.alloc(int(unsafe.Sizeof(v)), false))
 	}
 	*r = v
 	return
@@ -260,7 +272,7 @@ func (ac *Allocator) Int64(v int64) (r *int64) {
 	if ac == nil || ac.disabled {
 		r = new(int64)
 	} else {
-		r = ac.typedAlloc(i64PtrType, unsafe.Sizeof(v), false).(*int64)
+		r = (*int64)(ac.alloc(int(unsafe.Sizeof(v)), false))
 	}
 	*r = v
 	return
@@ -270,7 +282,7 @@ func (ac *Allocator) Uint64(v uint64) (r *uint64) {
 	if ac == nil || ac.disabled {
 		r = new(uint64)
 	} else {
-		r = ac.typedAlloc(u64PtrType, unsafe.Sizeof(v), false).(*uint64)
+		r = (*uint64)(ac.alloc(int(unsafe.Sizeof(v)), false))
 	}
 	*r = v
 	return
@@ -280,7 +292,7 @@ func (ac *Allocator) Float32(v float32) (r *float32) {
 	if ac == nil || ac.disabled {
 		r = new(float32)
 	} else {
-		r = ac.typedAlloc(f32PtrType, unsafe.Sizeof(v), false).(*float32)
+		r = (*float32)(ac.alloc(int(unsafe.Sizeof(v)), false))
 	}
 	*r = v
 	return
@@ -290,7 +302,7 @@ func (ac *Allocator) Float64(v float64) (r *float64) {
 	if ac == nil || ac.disabled {
 		r = new(float64)
 	} else {
-		r = ac.typedAlloc(f64PtrType, unsafe.Sizeof(v), false).(*float64)
+		r = (*float64)(ac.alloc(int(unsafe.Sizeof(v)), false))
 	}
 	*r = v
 	return
@@ -301,7 +313,7 @@ func (ac *Allocator) String(v string) (r *string) {
 		r = new(string)
 		*r = v
 	} else {
-		r = ac.typedAlloc(strPtrType, unsafe.Sizeof(v), false).(*string)
+		r = (*string)(ac.alloc(int(unsafe.Sizeof(v)), false))
 		*r = ac.NewString(v)
 	}
 	return

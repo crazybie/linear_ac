@@ -16,18 +16,6 @@ import (
 	"unsafe"
 )
 
-var (
-	boolPtrType = reflect.TypeOf((*bool)(nil))
-	intPtrType  = reflect.TypeOf((*int)(nil))
-	i32PtrType  = reflect.TypeOf((*int32)(nil))
-	u32PtrType  = reflect.TypeOf((*uint32)(nil))
-	i64PtrType  = reflect.TypeOf((*int64)(nil))
-	u64PtrType  = reflect.TypeOf((*uint64)(nil))
-	f32PtrType  = reflect.TypeOf((*float32)(nil))
-	f64PtrType  = reflect.TypeOf((*float64)(nil))
-	strPtrType  = reflect.TypeOf((*string)(nil))
-)
-
 const PtrSize = int(unsafe.Sizeof(uintptr(0)))
 
 func init() {

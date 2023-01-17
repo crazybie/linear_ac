@@ -31,10 +31,11 @@ var chunkPool = Pool[*sliceHeader]{
 // Allocator
 
 type Allocator struct {
-	disabled bool
-	chunks   []*sliceHeader
-	curChunk unsafe.Pointer //*sliceHeader
-	refCnt   int32
+	disabled        bool
+	chunks          []*sliceHeader
+	curChunk        unsafe.Pointer //*sliceHeader
+	refCnt          int32
+	TotalAllocBytes int32
 
 	// NOTE:
 	// To keep these externals alive, slices must be alloc from raw allocator to make them
@@ -66,6 +67,36 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 	var header, new_ *sliceHeader
 	var len_, cap_ int64
 
+	// fast version for single-threaded case.
+	if atomic.LoadInt32(&ac.refCnt) == 1 {
+		for {
+			if ac.curChunk != nil {
+				header = (*sliceHeader)(ac.curChunk)
+				len_ = header.Len
+				cap_ = header.Cap
+			}
+			if len_+int64(needAligned) > cap_ {
+				if needAligned > ChunkSize {
+					t := make(chunk, 0, need)
+					new_ = (*sliceHeader)(unsafe.Pointer(&t))
+				} else {
+					new_ = chunkPool.Get()
+				}
+				ac.curChunk = unsafe.Pointer(new_)
+				ac.chunks = append(ac.chunks, new_)
+			} else {
+				header.Len += int64(needAligned)
+				ptr := unsafe.Add(header.Data, len_)
+				if zero {
+					memclrNoHeapPointers(ptr, uintptr(needAligned))
+				}
+				ac.TotalAllocBytes += int32(needAligned)
+				return ptr
+			}
+		}
+	}
+
+	// lock-free version for multi-threaded case.
 	for {
 		cur := atomic.LoadPointer(&ac.curChunk)
 		if cur != nil {
@@ -92,6 +123,7 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 				if zero {
 					memclrNoHeapPointers(ptr, uintptr(needAligned))
 				}
+				atomic.AddInt32(&ac.TotalAllocBytes, int32(needAligned))
 				return ptr
 			}
 		}
@@ -133,24 +165,7 @@ func (ac *Allocator) reset() {
 
 	ac.disabled = DisableLac
 	atomic.StoreInt32(&ac.refCnt, 1)
-}
-
-func (ac *Allocator) typedAlloc(ptrTp reflect.Type, sz uintptr, zero bool) (ret interface{}) {
-	if sz == 0 {
-		sz = ptrTp.Elem().Size()
-	}
-	ptr := ac.alloc(int(sz), zero)
-	*(*emptyInterface)(unsafe.Pointer(&ret)) = emptyInterface{data(ptrTp), ptr}
-
-	if debugMode {
-		if ptrTp.Elem().Kind() == reflect.Struct {
-			ac.dbgScanObjsLock.Lock()
-			ac.dbgScanObjs = append(ac.dbgScanObjs, ret)
-			ac.dbgScanObjsLock.Unlock()
-		}
-	}
-
-	return
+	ac.TotalAllocBytes = 0
 }
 
 func (ac *Allocator) keepAlive(ptr interface{}) {

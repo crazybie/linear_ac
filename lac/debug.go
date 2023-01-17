@@ -34,6 +34,12 @@ func (ac *Allocator) CheckExternalPointers() {
 	ac.debugCheck(false)
 }
 
+func (ac *Allocator) debugScan(obj any) {
+	ac.dbgScanObjsLock.Lock()
+	ac.dbgScanObjs = append(ac.dbgScanObjs, obj)
+	ac.dbgScanObjsLock.Unlock()
+}
+
 // Use 1 instead of nil or MaxUint64 to
 // 1. make non-nil check pass.
 // 2. generate a recoverable panic.
