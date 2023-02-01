@@ -20,12 +20,13 @@ import (
 type chunk []byte
 
 var chunkPool = Pool[*sliceHeader]{
+	Name: "chunkPool",
 	New: func() *sliceHeader {
 		c := make(chunk, 0, ChunkSize)
 		return (*sliceHeader)(unsafe.Pointer(&c))
 	},
 	Max:   MaxChunks,
-	Equal: func(a, b *sliceHeader) bool { return unsafe.Pointer(a) == unsafe.Pointer(b) },
+	Equal: func(a, b *sliceHeader) bool { return a == b },
 }
 
 // Allocator

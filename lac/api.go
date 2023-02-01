@@ -16,20 +16,18 @@ import (
 	"unsafe"
 )
 
-// BuildInAc switches to native allocator.
-var BuildInAc = &Allocator{disabled: true}
-
 var acPool = Pool[*Allocator]{
+	Name:   "lacPool",
 	New:    newLac,
 	Max:    MaxLac,
 	Equal:  func(a, b *Allocator) bool { return a == b },
-	MaxNew: 20, // detect whether user call Release or DecRef correctly in debug mode.
+	MaxNew: MaxNewLacInDebug,
 }
 
 // ReserveChunkPool should be called at the startup of the application.
 func ReserveChunkPool(sz int) {
-	if sz == 0 {
-		sz = DefaultChunks
+	if DisableLac {
+		return
 	}
 	chunkPool.Reserve(sz)
 }
@@ -42,7 +40,7 @@ func Get() *Allocator {
 }
 
 func (ac *Allocator) Release() {
-	if ac == nil || ac == BuildInAc {
+	if ac == nil || ac.disabled {
 		return
 	}
 	ac.reset()
@@ -102,8 +100,8 @@ func New[T any](ac *Allocator) (r *T) {
 	return r
 }
 
-// NewFrom will coy the src object from heap to lac thus slower than New due to the heap malloc of src.
-// It is useful to create an object using struct literal syntax and old-code migration:
+// NewFrom copy the src object from heap to lac thus slower than New due to the heap malloc of src.
+// It is useful for old-code migration using struct literal syntax:
 //
 //	obj := lac.NewFrom(ac, &SomeData{
 //		Field1: Value1,

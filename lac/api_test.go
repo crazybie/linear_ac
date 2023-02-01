@@ -243,7 +243,7 @@ func Test_NewFrom(b *testing.T) {
 }
 
 func Test_BuildInAllocator(t *testing.T) {
-	ac := BuildInAc
+	var ac *Allocator
 	defer ac.Release()
 
 	item := New[PbItem](ac)

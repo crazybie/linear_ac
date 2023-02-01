@@ -26,6 +26,22 @@ func EnableDebugMode(v bool) {
 	debugMode = v
 	acPool.Debug = v
 	chunkPool.Debug = v
+
+	// reload cfg
+	acPool.MaxNew = MaxNewLacInDebug
+	acPool.Max = MaxLac
+	chunkPool.Max = MaxChunks
+}
+
+// DebugCheck check if all items from pool are all returned to pool.
+// useful for leak-checking.
+func DebugCheck() {
+	if debugMode {
+		acPool.DebugCheck()
+
+		// chunks will be put to a syncPool instead of chunkPool for debugging purpose.
+		// chunkPool.DebugCheck()
+	}
 }
 
 // CheckExternalPointers is useful for if you want to check external pointers but don't want to invalidate pointers.

@@ -167,9 +167,8 @@ func BenchmarkNewFrom(b *testing.B) {
 }
 
 func Benchmark_RawMalloc(t *testing.B) {
-	runtime.GC()
 
-	t.StartTimer()
+	t.ResetTimer()
 	var e *PbItem
 	for i := 0; i < t.N; i++ {
 		e = new(PbItem)
@@ -193,7 +192,29 @@ func Benchmark_LacMalloc(t *testing.B) {
 	ac := Get()
 	defer ac.Release()
 
-	t.StartTimer()
+	t.ResetTimer()
+	var e *PbItem
+	for i := 0; i < t.N; i++ {
+		e = New[PbItem](ac)
+		e.Name = ac.String("a")
+		e.Class = ac.Int(i)
+		e.Id = ac.Int(i + 10)
+		e.Active = ac.Bool(true)
+	}
+	runtime.KeepAlive(e)
+	t.StopTimer()
+	chunkPool.Clear()
+}
+
+func Benchmark_LacMallocMt(t *testing.B) {
+	EnableDebugMode(false)
+	ReserveChunkPool(32 * 1024)
+	runtime.GC()
+	ac := Get()
+	ac.IncRef()
+	defer ac.Release()
+
+	t.ResetTimer()
 	var e *PbItem
 	for i := 0; i < t.N; i++ {
 		e = New[PbItem](ac)
@@ -208,8 +229,7 @@ func Benchmark_LacMalloc(t *testing.B) {
 }
 
 func Benchmark_RawMallocLarge2(t *testing.B) {
-	runtime.GC()
-	t.StartTimer()
+	t.ResetTimer()
 	var e *PbDataEx
 	for i := 0; i < t.N; i++ {
 		e = makeDataAc(nil, i)
@@ -224,13 +244,32 @@ func Benchmark_LacMallocLarge2(t *testing.B) {
 	runtime.GC()
 	ac := Get()
 
-	t.StartTimer()
+	t.ResetTimer()
 	var e *PbDataEx
 	for i := 0; i < t.N; i++ {
 		e = makeDataAc(ac, i)
 	}
 	runtime.KeepAlive(e)
-	t.StartTimer()
+	t.StopTimer()
+
+	ac.Release()
+	chunkPool.Clear()
+}
+
+func Benchmark_LacMallocLarge2Mt(t *testing.B) {
+	EnableDebugMode(false)
+	ReserveChunkPool(32 * 1024)
+	runtime.GC()
+	ac := Get()
+	ac.IncRef()
+
+	t.ResetTimer()
+	var e *PbDataEx
+	for i := 0; i < t.N; i++ {
+		e = makeDataAc(ac, i)
+	}
+	runtime.KeepAlive(e)
+	t.StopTimer()
 
 	ac.Release()
 	chunkPool.Clear()

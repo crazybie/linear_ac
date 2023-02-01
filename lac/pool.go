@@ -21,6 +21,7 @@ import (
 )
 
 type Pool[T any] struct {
+	Name   string
 	m      SpinLock
 	New    func() T
 	pool   []T
@@ -51,7 +52,7 @@ func (p *Pool[T]) Get() T {
 func (p *Pool[T]) doNew() T {
 	p.newCnt++
 	if p.Debug && p.MaxNew > 0 && p.newCnt > p.MaxNew {
-		panic("creates too many objects, potential memory leak?")
+		panic(fmt.Errorf("%s: creates too many objects (%v), potential memory leak", p.Name, p.MaxNew))
 	}
 	return p.New()
 }
@@ -63,12 +64,12 @@ func (p *Pool[T]) Put(v T) {
 	if p.Debug && p.Equal != nil {
 		for _, i := range p.pool {
 			if p.Equal(i, v) {
-				panic(fmt.Errorf("already in pool: %v, %v", i, v))
+				panic(fmt.Errorf("%s: already in pool: %v, %v", p.Name, i, v))
 			}
 		}
 	}
 
-	if p.Max == 0 || len(p.pool) < p.Max {
+	if (p.Max == 0 || len(p.pool) < p.Max) || p.Debug {
 		p.pool = append(p.pool, v)
 	}
 }
@@ -87,5 +88,13 @@ func (p *Pool[T]) Reserve(cnt int) {
 	p.pool = make([]T, cnt)
 	for i := 0; i < cnt; i++ {
 		p.pool[i] = p.doNew()
+	}
+}
+
+func (p *Pool[T]) DebugCheck() {
+	if p.Debug {
+		if len(p.pool) != p.newCnt {
+			panic(fmt.Errorf("%s: %d items are not returned to pool", p.Name, p.newCnt-len(p.pool)))
+		}
 	}
 }

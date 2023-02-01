@@ -10,10 +10,11 @@
 package lac
 
 var (
-	debugMode     = false
-	DisableLac    = false
-	MaxLac        = 10000     // Lacs exceed this threshold will not be returned to the runtime.
-	ChunkSize     = 64 * 1024 // larger request use the system allocator.
-	DefaultChunks = 4 * 1024
-	MaxChunks     = DefaultChunks * 2 // chunks exceed this threshold will be returned to the runtime.
+	debugMode        = false
+	DisableLac       = false
+	MaxLac           = 10000     // Lacs exceed this threshold will not be returned to the runtime.
+	MaxNewLacInDebug = 20        // detect whether user call Release or DecRef correctly in debug mode.
+	ChunkSize        = 64 * 1024 // larger request use the system allocator.
+	DefaultChunks    = 4 * 1024
+	MaxChunks        = DefaultChunks * 2 // chunks exceed this threshold will be returned to the runtime.
 )
