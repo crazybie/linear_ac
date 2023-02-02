@@ -17,4 +17,6 @@ var (
 	ChunkSize        = 64 * 1024 // larger request use the system allocator.
 	DefaultChunks    = 4 * 1024
 	MaxChunks        = DefaultChunks * 2 // chunks exceed this threshold will be returned to the runtime.
+
+	SliceExtendRatio float64 = 2.5
 )

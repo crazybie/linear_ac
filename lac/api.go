@@ -49,12 +49,12 @@ func (ac *Allocator) Release() {
 
 // IncRef should be used at outside the new goroutine, e.g.
 //
-//		ac.IncRef() // <- should be called outside the new goroutine.
-//	 go func() {
-//			// ac.IncRef() <<<- incorrect usage.
-//			defer ac.DecRef()
-//			....
-//		}()
+//	ac.IncRef() // <- should be called outside the new goroutine.
+//	go func() {
+//		// ac.IncRef() <<<- Incorrect usage!!!!
+//		defer ac.DecRef()
+//		....
+//	}()
 //
 // not in the new goroutine, otherwise the execution of new goroutine may be delayed after the caller quit,
 // which may cause a UseAfterFree error.
@@ -101,6 +101,7 @@ func New[T any](ac *Allocator) (r *T) {
 }
 
 // NewFrom copy the src object from heap to lac thus slower than New due to the heap malloc of src.
+// Prefer using New for better performance.
 // It is useful for old-code migration using struct literal syntax:
 //
 //	obj := lac.NewFrom(ac, &SomeData{
@@ -137,6 +138,7 @@ func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
 		return make([]T, len, cap)
 	}
 
+	// keep same with systems `new`.
 	if len > cap {
 		panic("NewSlice: cap out of range")
 	}
@@ -159,9 +161,11 @@ func Append[T any](ac *Allocator, s []T, v T) []T {
 	// grow
 	if h.Len >= h.Cap {
 		pre := *h
-		h.Cap *= 2
+		// our memory is much cheaper than systems,
+		// so we can be more aggressive than `append`.
+		h.Cap = int64(float64(h.Cap) * SliceExtendRatio)
 		if h.Cap == 0 {
-			h.Cap = 4
+			h.Cap = 16
 		}
 		h.Data = ac.alloc(int(h.Cap)*elemSz, false)
 		memmoveNoHeapPointers(h.Data, pre.Data, uintptr(int(pre.Len)*elemSz))
