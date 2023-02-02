@@ -29,8 +29,8 @@ func EnableDebugMode(v bool) {
 
 	// reload cfg
 	acPool.MaxNew = MaxNewLacInDebug
-	acPool.Max = MaxLac
-	chunkPool.Max = MaxChunks
+	acPool.Cap = MaxLac
+	chunkPool.Cap = MaxChunks
 }
 
 // DebugCheck check if all items from pool are all returned to pool.
@@ -51,9 +51,7 @@ func (ac *Allocator) CheckExternalPointers() {
 }
 
 func (ac *Allocator) debugScan(obj any) {
-	ac.dbgScanObjsLock.Lock()
-	ac.dbgScanObjs = append(ac.dbgScanObjs, obj)
-	ac.dbgScanObjsLock.Unlock()
+	ac.dbgScanObjs.Put(obj)
 }
 
 // Use 1 instead of nil or MaxUint64 to
@@ -86,7 +84,7 @@ func (ac *Allocator) checkPointerType(addr uintptr) PointerType {
 		}
 	}
 
-	for _, c := range ac.externalPtr {
+	for _, c := range ac.externalPtr.slice {
 		if uintptr(c) == addr {
 			return PointerTypeExternalMarked
 		}
@@ -109,8 +107,8 @@ func (ac *Allocator) debugCheck(invalidatePointers bool) {
 	}
 
 	// reverse order to bypass obfuscated pointers
-	for i := len(ac.dbgScanObjs) - 1; i >= 0; i-- {
-		ptr := ac.dbgScanObjs[i]
+	for i := len(ac.dbgScanObjs.slice) - 1; i >= 0; i-- {
+		ptr := ac.dbgScanObjs.slice[i]
 		if _, ok := ctx.checked[ptr]; ok {
 			continue
 		}
@@ -173,8 +171,8 @@ func (ac *Allocator) checkRecursively(val reflect.Value, ctx *CheckCtx) error {
 				h := (*sliceHeader)(unsafe.Pointer(f.UnsafeAddr()))
 				if f.Len() > 0 && h.Data != nil {
 					found := false
-					for _, i := range ac.externalSlice {
-						if i == h.Data {
+					for _, s := range ac.externalSlice.slice {
+						if s == h.Data {
 							found = true
 							break
 						}
@@ -207,7 +205,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, ctx *CheckCtx) error {
 			case reflect.Map:
 				m := *(*unsafe.Pointer)(unsafe.Pointer(f.UnsafeAddr()))
 				found := false
-				for _, i := range ac.externalMap {
+				for _, i := range ac.externalMap.slice {
 					if data(i) == m {
 						found = true
 						break
@@ -226,8 +224,8 @@ func (ac *Allocator) checkRecursively(val reflect.Value, ctx *CheckCtx) error {
 				h := (*stringHeader)(unsafe.Pointer(f.UnsafeAddr()))
 				if f.Len() > 0 && h.Data != nil {
 					found := false
-					for _, i := range ac.externalString {
-						if i == h.Data {
+					for _, s := range ac.externalString.slice {
+						if s == h.Data {
 							found = true
 							break
 						}
@@ -243,11 +241,11 @@ func (ac *Allocator) checkRecursively(val reflect.Value, ctx *CheckCtx) error {
 				}
 
 			case reflect.Func:
-				p := f.UnsafePointer()
-				if p != nil {
+				p := interfaceOfUnexported(f)
+				if data(p) != nil {
 					found := false
-					for _, i := range ac.externalPtr {
-						if i == p {
+					for _, i2 := range ac.externalFunc.slice {
+						if interfaceEqual(i2, p) {
 							found = true
 							break
 						}

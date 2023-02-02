@@ -25,7 +25,7 @@ type Pool[T any] struct {
 	m      SpinLock
 	New    func() T
 	pool   []T
-	Max    int
+	Cap    int
 	newCnt int
 
 	Debug  bool
@@ -52,25 +52,28 @@ func (p *Pool[T]) Get() T {
 func (p *Pool[T]) doNew() T {
 	p.newCnt++
 	if p.Debug && p.MaxNew > 0 && p.newCnt > p.MaxNew {
-		panic(fmt.Errorf("%s: creates too many objects (%v), potential memory leak", p.Name, p.MaxNew))
+		panic(fmt.Errorf("%s: pool exhausted (%v), potential leak", p.Name, p.MaxNew))
 	}
 	return p.New()
 }
 
-func (p *Pool[T]) Put(v T) {
+func (p *Pool[T]) Put(v T) bool {
 	p.m.Lock()
 	defer p.m.Unlock()
 
 	if p.Debug && p.Equal != nil {
 		for _, i := range p.pool {
 			if p.Equal(i, v) {
-				panic(fmt.Errorf("%s: already in pool: %v, %v", p.Name, i, v))
+				panic(fmt.Errorf("%s: duplicated: %v, %v", p.Name, i, v))
 			}
 		}
 	}
 
-	if (p.Max == 0 || len(p.pool) < p.Max) || p.Debug {
+	if (p.Cap == 0 || len(p.pool) < p.Cap) || p.Debug {
 		p.pool = append(p.pool, v)
+		return true
+	} else {
+		return false
 	}
 }
 
@@ -94,7 +97,7 @@ func (p *Pool[T]) Reserve(cnt int) {
 func (p *Pool[T]) DebugCheck() {
 	if p.Debug {
 		if len(p.pool) != p.newCnt {
-			panic(fmt.Errorf("%s: %d items are not returned to pool", p.Name, p.newCnt-len(p.pool)))
+			panic(fmt.Errorf("%s: %d leaked. cur:%v,max: %v", p.Name, p.newCnt-len(p.pool), p.newCnt, len(p.pool)))
 		}
 	}
 }

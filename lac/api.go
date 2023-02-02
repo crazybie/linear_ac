@@ -17,9 +17,9 @@ import (
 )
 
 var acPool = Pool[*Allocator]{
-	Name:   "lacPool",
+	Name:   "LacPool",
 	New:    newLac,
-	Max:    MaxLac,
+	Cap:    MaxLac,
 	Equal:  func(a, b *Allocator) bool { return a == b },
 	MaxNew: MaxNewLacInDebug,
 }

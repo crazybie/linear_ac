@@ -10,6 +10,8 @@
 package lac
 
 import (
+	"fmt"
+	"math"
 	"reflect"
 	"sync/atomic"
 	"unsafe"
@@ -20,12 +22,12 @@ import (
 type chunk []byte
 
 var chunkPool = Pool[*sliceHeader]{
-	Name: "chunkPool",
+	Name: "LacChunkPool",
 	New: func() *sliceHeader {
 		c := make(chunk, 0, ChunkSize)
 		return (*sliceHeader)(unsafe.Pointer(&c))
 	},
-	Max:   MaxChunks,
+	Cap:   MaxChunks,
 	Equal: func(a, b *sliceHeader) bool { return a == b },
 }
 
@@ -34,6 +36,7 @@ var chunkPool = Pool[*sliceHeader]{
 type Allocator struct {
 	disabled        bool
 	chunks          []*sliceHeader
+	chunksLock      SpinLock
 	curChunk        unsafe.Pointer //*sliceHeader
 	refCnt          int32
 	TotalAllocBytes int32
@@ -41,16 +44,13 @@ type Allocator struct {
 	// NOTE:
 	// To keep these externals alive, slices must be alloc from raw allocator to make them
 	// available to the GC. never alloc them from Lac itself.
-	externalPtr        []unsafe.Pointer
-	externalPtrLock    SpinLock
-	externalSlice      []unsafe.Pointer
-	externalSliceLock  SpinLock
-	externalString     []unsafe.Pointer
-	externalStringLock SpinLock
-	externalMap        []interface{}
-	externalMapLock    SpinLock
-	dbgScanObjs        []interface{}
-	dbgScanObjsLock    SpinLock
+	externalPtr    WeakUniqQueue[unsafe.Pointer]
+	externalSlice  WeakUniqQueue[unsafe.Pointer]
+	externalString WeakUniqQueue[unsafe.Pointer]
+	externalMap    WeakUniqQueue[any]
+	externalFunc   WeakUniqQueue[any]
+
+	dbgScanObjs WeakUniqQueue[any]
 }
 
 func newLac() *Allocator {
@@ -58,6 +58,14 @@ func newLac() *Allocator {
 		disabled: DisableLac,
 		refCnt:   1,
 		chunks:   make([]*sliceHeader, 0, 4),
+
+		externalPtr:    NewWeakUniqQueue(32, unsafePtrEq),
+		externalSlice:  NewWeakUniqQueue(32, unsafePtrEq),
+		externalString: NewWeakUniqQueue(32, unsafePtrEq),
+		externalMap:    NewWeakUniqQueue(32, anyEq),
+		externalFunc:   NewWeakUniqQueue(32, interfaceEqual),
+
+		dbgScanObjs: NewWeakUniqQueue(math.MaxInt, anyEq),
 	}
 	return ac
 }
@@ -114,7 +122,9 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 				new_ = chunkPool.Get()
 			}
 			if atomic.CompareAndSwapPointer(&ac.curChunk, cur, unsafe.Pointer(new_)) {
+				ac.chunksLock.Lock()
 				ac.chunks = append(ac.chunks, new_)
+				ac.chunksLock.Unlock()
 			} else if new_.Cap == int64(ChunkSize) {
 				chunkPool.Put(new_)
 			}
@@ -138,7 +148,7 @@ func (ac *Allocator) reset() {
 
 	if debugMode {
 		ac.debugCheck(true)
-		ac.dbgScanObjs = ac.dbgScanObjs[:0]
+		ac.dbgScanObjs.Clear()
 	}
 
 	for _, ck := range ac.chunks {
@@ -159,10 +169,11 @@ func (ac *Allocator) reset() {
 	ac.curChunk = nil
 
 	// clear externals
-	ac.externalPtr = nil
-	ac.externalSlice = nil
-	ac.externalMap = nil
-	ac.externalString = nil
+	ac.externalPtr.Clear()
+	ac.externalSlice.Clear()
+	ac.externalMap.Clear()
+	ac.externalString.Clear()
+	ac.externalFunc.Clear()
 
 	ac.disabled = DisableLac
 	atomic.StoreInt32(&ac.refCnt, 1)
@@ -179,26 +190,19 @@ func (ac *Allocator) keepAlive(ptr interface{}) {
 		return
 	}
 
-	switch reflect.TypeOf(ptr).Kind() {
+	k := reflect.TypeOf(ptr).Kind()
+	switch k {
 	case reflect.Ptr:
-		ac.externalPtrLock.Lock()
-		defer ac.externalPtrLock.Unlock()
-		ac.externalPtr = append(ac.externalPtr, d)
+		ac.externalPtr.Put(d)
 	case reflect.Slice:
-		ac.externalSliceLock.Lock()
-		defer ac.externalSliceLock.Unlock()
-		ac.externalSlice = append(ac.externalSlice, (*sliceHeader)(d).Data)
+		ac.externalSlice.Put((*sliceHeader)(d).Data)
 	case reflect.String:
-		ac.externalStringLock.Lock()
-		defer ac.externalStringLock.Unlock()
-		ac.externalString = append(ac.externalString, (*stringHeader)(d).Data)
+		ac.externalString.Put((*stringHeader)(d).Data)
 	case reflect.Map:
-		ac.externalMapLock.Lock()
-		defer ac.externalMapLock.Unlock()
-		ac.externalMap = append(ac.externalMap, d)
+		ac.externalMap.Put(d)
 	case reflect.Func:
-		ac.externalPtrLock.Lock()
-		defer ac.externalPtrLock.Unlock()
-		ac.externalPtr = append(ac.externalPtr, reflect.ValueOf(ptr).UnsafePointer())
+		ac.externalFunc.Put(ptr)
+	default:
+		panic(fmt.Errorf("unsupported type: %v", k))
 	}
 }

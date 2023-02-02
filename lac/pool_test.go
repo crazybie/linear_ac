@@ -29,7 +29,7 @@ func Test_PoolDebug(t *testing.T) {
 func Test_PoolMemLeak(t *testing.T) {
 	p := Pool[int]{
 		New: func() int { return 0 },
-		Max: 1,
+		Cap: 1,
 	}
 	p.Put(1)
 	p.Put(2)
