@@ -161,9 +161,14 @@ func Append[T any](ac *Allocator, s []T, v T) []T {
 	// grow
 	if h.Len >= h.Cap {
 		pre := *h
-		// our memory is much cheaper than systems,
-		// so we can be more aggressive than `append`.
-		h.Cap = int64(float64(h.Cap) * SliceExtendRatio)
+
+		cur := float64(h.Cap)
+		h.Cap = int64(cur * SliceExtendRatio)
+		// prefer to fit in a normal chunk.
+		if h.Cap > int64(ChunkSize) && SliceExtendRatio > 1.5 {
+			h.Cap = int64(cur * 1.5)
+		}
+
 		if h.Cap == 0 {
 			h.Cap = 16
 		}

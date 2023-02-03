@@ -18,5 +18,7 @@ var (
 	DefaultChunks    = 4 * 1024
 	MaxChunks        = DefaultChunks * 2 // chunks exceed this threshold will be returned to the runtime.
 
+	// our memory is much cheaper than systems,
+	// so we can be more aggressive than `append`.
 	SliceExtendRatio float64 = 2.5
 )
