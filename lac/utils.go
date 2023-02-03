@@ -123,6 +123,8 @@ func NewWeakUniqQueue[T any](strongUniqRange int, eq func(a, b T) bool) WeakUniq
 }
 
 func (e *WeakUniqQueue[T]) Clear() {
+	e.Lock()
+	defer e.Unlock()
 	e.slice = nil
 }
 

@@ -41,6 +41,8 @@ func DebugCheck() {
 
 		// chunks will be put to a syncPool instead of chunkPool for debugging purpose.
 		// chunkPool.DebugCheck()
+
+		fmt.Printf("Lac: debug check done.\n")
 	}
 }
 
@@ -55,7 +57,7 @@ func (ac *Allocator) debugScan(obj any) {
 }
 
 // Use 1 instead of nil or MaxUint64 to
-// 1. make non-nil check pass.
+// 1. make non-nil check pass to allow the dereference of pointer.
 // 2. generate a recoverable panic.
 const nonNilPanickyAddr = uintptr(1)
 

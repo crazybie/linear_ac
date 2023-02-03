@@ -70,13 +70,14 @@ func newLac() *Allocator {
 	return ac
 }
 
-// alloc use lock-free algorithm to avoid locking.
+// alloc auto select single-thread or multi-thread algo.
+// multi-thread version uses lock-free algorithm to reduce locking.
 func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 	needAligned := (need + PtrSize + 1) & ^(PtrSize - 1)
 	var header, new_ *sliceHeader
 	var len_, cap_ int64
 
-	// fast version for single-threaded case.
+	// single-threaded path
 	if atomic.LoadInt32(&ac.refCnt) == 1 {
 		for {
 			if ac.curChunk != nil {
@@ -105,7 +106,7 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 		}
 	}
 
-	// lock-free version for multi-threaded case.
+	// multi-threaded path
 	for {
 		cur := atomic.LoadPointer(&ac.curChunk)
 		if cur != nil {
