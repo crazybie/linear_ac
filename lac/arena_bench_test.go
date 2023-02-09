@@ -129,7 +129,7 @@ func Benchmark_RawMallocSmall(t *testing.B) {
 	runtime.GC()
 	var ac *Allocator
 
-	t.ResetTimer()
+	t.StartTimer()
 	for i := 0; i < t.N; i++ {
 		e := New[PbItem](ac)
 		e.Name = ac.String("a")
@@ -146,7 +146,7 @@ func Benchmark_LacMallocSmall(t *testing.B) {
 	runtime.GC()
 	ac := Get()
 
-	t.ResetTimer()
+	t.StartTimer()
 	for i := 0; i < t.N; i++ {
 		e := New[PbItem](ac)
 		e.Name = ac.String("a")
@@ -162,7 +162,7 @@ func Benchmark_ArenaMallocSmall(t *testing.B) {
 	runtime.GC()
 	ac := arena.NewArena()
 
-	t.ResetTimer()
+	t.StartTimer()
 	for i := 0; i < t.N; i++ {
 		e := arena.New[PbItem](ac)
 		e.Name = arena.New[string](ac)
@@ -181,7 +181,7 @@ func Benchmark_ArenaMallocSmall(t *testing.B) {
 
 func Benchmark_RawMallocLarge(t *testing.B) {
 	runtime.GC()
-	t.ResetTimer()
+	t.StartTimer()
 	for i := 0; i < t.N; i++ {
 		e := makeDataAc(nil, i)
 		runtime.KeepAlive(e)
@@ -195,12 +195,12 @@ func Benchmark_LacMallocLarge(t *testing.B) {
 	runtime.GC()
 	ac := Get()
 
-	t.ResetTimer()
+	t.StartTimer()
 	for i := 0; i < t.N; i++ {
 		e := makeDataAc(ac, i)
 		runtime.KeepAlive(e)
 	}
-	t.StopTimer()
+	t.StartTimer()
 
 	ac.Release()
 	acPool.Clear()
@@ -210,7 +210,7 @@ func Benchmark_LacMallocLarge(t *testing.B) {
 func Benchmark_ArenaMallocLarge(t *testing.B) {
 	runtime.GC()
 	ac := arena.NewArena()
-	t.ResetTimer()
+	t.StartTimer()
 	for i := 0; i < t.N; i++ {
 		e := makeDataArena(ac, i)
 		runtime.KeepAlive(e)

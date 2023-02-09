@@ -25,6 +25,7 @@ var chunkPool = Pool[*sliceHeader]{
 	Name: "LacChunkPool",
 	New: func() *sliceHeader {
 		c := make(chunk, 0, ChunkSize)
+		Stats.TotalChunks.Add(1)
 		return (*sliceHeader)(unsafe.Pointer(&c))
 	},
 	Cap:   MaxChunks,
@@ -67,6 +68,8 @@ func newLac() *Allocator {
 
 		dbgScanObjs: NewWeakUniqQueue(math.MaxInt, anyEq),
 	}
+
+	Stats.TotalAllocator.Add(1)
 	return ac
 }
 
@@ -79,6 +82,8 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 
 	// single-threaded path
 	if atomic.LoadInt32(&ac.refCnt) == 1 {
+		Stats.SingleThreadAlloc.Add(1)
+
 		for {
 			if ac.curChunk != nil {
 				header = (*sliceHeader)(ac.curChunk)
@@ -101,12 +106,14 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 					memclrNoHeapPointers(ptr, uintptr(needAligned))
 				}
 				ac.TotalAllocBytes += int32(needAligned)
+				Stats.TotalAllocBytes.Add(int64(needAligned))
 				return ptr
 			}
 		}
 	}
 
 	// multi-threaded path
+	Stats.MultiThreadAlloc.Add(1)
 	for {
 		cur := atomic.LoadPointer(&ac.curChunk)
 		if cur != nil {
@@ -136,6 +143,7 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 					memclrNoHeapPointers(ptr, uintptr(needAligned))
 				}
 				atomic.AddInt32(&ac.TotalAllocBytes, int32(needAligned))
+				Stats.TotalAllocBytes.Add(int64(needAligned))
 				return ptr
 			}
 		}

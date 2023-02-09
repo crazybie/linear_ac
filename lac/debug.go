@@ -14,8 +14,37 @@ import (
 	"math"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 )
+
+type RuntimeStats struct {
+	SingleThreadAlloc atomic.Int64
+	MultiThreadAlloc  atomic.Int64
+	TotalAllocBytes   atomic.Int64
+	TotalChunks       atomic.Int64
+	TotalAllocator    atomic.Int64
+}
+
+var Stats RuntimeStats
+
+func DumpStats(reset bool) string {
+	s := fmt.Sprintf("alloc(st):%v, alloc(mt):%v, bytes:%v, chunks:%v, chunks(pool):%v, lac:%v, lac(pool):%v",
+		Stats.SingleThreadAlloc.Load(),
+		Stats.MultiThreadAlloc.Load(),
+		Stats.TotalAllocBytes.Load(),
+		Stats.TotalChunks.Load(),
+		len(chunkPool.pool),
+		Stats.TotalAllocator.Load(),
+		len(acPool.pool),
+	)
+	if reset {
+		Stats.SingleThreadAlloc.Store(0)
+		Stats.MultiThreadAlloc.Store(0)
+		Stats.TotalAllocBytes.Store(0)
+	}
+	return s
+}
 
 // Objects in sync.Pool will be recycled on demand by the system (usually after two GC).
 // we can put chunks here to make pointers live longer,
