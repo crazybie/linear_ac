@@ -9,17 +9,9 @@
 
 package lac
 
-const (
-	ChunkSize     = 128 * 1024 // larger request use the system allocator.
-	DefaultChunks = 4 * 1024   // 512M
-)
-
 var (
-	debugMode        = false
-	DisableLac       = false
-	MaxLac           = 10000             // Lacs exceed this threshold will not be returned to the runtime.
-	MaxNewLacInDebug = 20                // detect whether user call Release or DecRef correctly in debug mode.
-	MaxChunks        = DefaultChunks * 2 // chunks exceed this threshold will be returned to the runtime.
+	DisableAllLac    = false
+	MaxNewLacInDebug = 200 // detect whether user call Release or DecRef correctly in debug mode.
 
 	// our memory is much cheaper than systems,
 	// so we can be more aggressive than `append`.

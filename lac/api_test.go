@@ -40,7 +40,7 @@ type PbData struct {
 }
 
 func Test_Smoke(t *testing.T) {
-	ac := Get()
+	ac := acPool.Get()
 	defer ac.Release()
 
 	d := New[PbData](ac)
@@ -78,7 +78,7 @@ func Test_Smoke(t *testing.T) {
 }
 
 func Test_Alignment(t *testing.T) {
-	ac := Get()
+	ac := acPool.Get()
 	defer ac.Release()
 
 	for i := 0; i < 1024; i++ {
@@ -90,7 +90,7 @@ func Test_Alignment(t *testing.T) {
 }
 
 func Test_String(t *testing.T) {
-	ac := Get()
+	ac := acPool.Get()
 	defer ac.Release()
 
 	type D struct {
@@ -109,7 +109,7 @@ func Test_String(t *testing.T) {
 }
 
 func Test_NewMap(t *testing.T) {
-	ac := Get()
+	ac := acPool.Get()
 	defer ac.Release()
 
 	type D struct {
@@ -131,8 +131,8 @@ func Test_NewMap(t *testing.T) {
 }
 
 func Test_NewSlice(t *testing.T) {
-	EnableDebugMode(true)
-	ac := Get()
+	acPool.EnableDebugMode(true)
+	ac := acPool.Get()
 	defer ac.Release()
 
 	s := make([]*int, 0)
@@ -216,7 +216,7 @@ func Test_NewFromRaw(b *testing.T) {
 }
 
 func Test_NewFrom(b *testing.T) {
-	ac := Get()
+	ac := acPool.Get()
 	defer ac.Release()
 
 	for i := 0; i < 3; i++ {
@@ -277,7 +277,7 @@ func Test_BuildInAllocator(t *testing.T) {
 }
 
 func Test_Enum(t *testing.T) {
-	ac := Get()
+	ac := acPool.Get()
 	defer ac.Release()
 
 	e := EnumVal2
@@ -288,7 +288,7 @@ func Test_Enum(t *testing.T) {
 }
 
 func Test_AttachExternal(b *testing.T) {
-	ac := Get()
+	ac := acPool.Get()
 	defer ac.Release()
 
 	type D struct {
@@ -310,7 +310,7 @@ func Test_AttachExternal(b *testing.T) {
 }
 
 func Test_Append(t *testing.T) {
-	ac := Get()
+	ac := acPool.Get()
 	defer ac.Release()
 
 	m := map[int][]int{}
@@ -331,7 +331,7 @@ func Test_Append(t *testing.T) {
 }
 
 func Test_SliceAppendStructValue(t *testing.T) {
-	ac := Get()
+	ac := acPool.Get()
 	defer ac.Release()
 
 	type S struct {
@@ -399,14 +399,14 @@ func Test_SliceWrongCap(t *testing.T) {
 			panic(fmt.Errorf("should panic: out of range"))
 		}
 	}()
-	ac := Get()
+	ac := acPool.Get()
 	defer ac.Release()
 	NewSlice[byte](ac, 10, 0)
 }
 
 // NOTE: run with "-race".
 func TestSharedAc_NoRace(t *testing.T) {
-	ac := Get()
+	ac := acPool.Get()
 	wg := sync.WaitGroup{}
 	wg.Add(100)
 

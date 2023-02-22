@@ -16,27 +16,11 @@ import (
 	"unsafe"
 )
 
-var acPool = Pool[*Allocator]{
-	Name:   "LacPool",
-	New:    newLac,
-	Cap:    MaxLac,
-	Equal:  func(a, b *Allocator) bool { return a == b },
-	MaxNew: MaxNewLacInDebug,
-}
-
-// ReserveChunkPool should be called at the startup of the application.
-func ReserveChunkPool(sz int) {
-	if DisableLac {
-		return
-	}
-	chunkPool.Reserve(sz)
-}
-
-func Get() *Allocator {
-	if DisableLac {
+func (p *AllocatorPool) Get() *Allocator {
+	if p == nil || DisableAllLac {
 		return nil
 	}
-	return acPool.Get()
+	return p.Pool.Get()
 }
 
 func (ac *Allocator) Release() {
@@ -44,7 +28,7 @@ func (ac *Allocator) Release() {
 		return
 	}
 	ac.reset()
-	acPool.Put(ac)
+	ac.acPool.Put(ac)
 }
 
 // IncRef should be used at outside the new goroutine, e.g.
@@ -75,7 +59,7 @@ func (ac *Allocator) DecRef() {
 		return
 	}
 	if n := atomic.AddInt32(&ac.refCnt, -1); n <= 0 {
-		if debugMode && n < 0 {
+		if ac.acPool.debugMode && n < 0 {
 			panic(fmt.Errorf("potential bug: ref cnt is negative: %v", n))
 		}
 		ac.Release()
@@ -92,7 +76,7 @@ func New[T any](ac *Allocator) (r *T) {
 	}
 
 	r = (*T)(ac.alloc(int(unsafe.Sizeof(*r)), true))
-	if debugMode {
+	if ac.acPool.debugMode {
 		if reflect.TypeOf(r).Elem().Kind() == reflect.Struct {
 			ac.debugScan(r)
 		}
@@ -101,7 +85,7 @@ func New[T any](ac *Allocator) (r *T) {
 }
 
 // NewFrom copy the src object from heap to lac thus slower than New due to the heap malloc of src.
-// Prefer using New for better performance.
+// **Prefer using New for better performance**.
 // It is useful for old-code migration using struct literal syntax:
 //
 //	obj := lac.NewFrom(ac, &SomeData{
@@ -123,7 +107,7 @@ func NewFrom[T any](ac *Allocator, src *T) *T {
 	ret := (*T)(ac.alloc(int(sz), false))
 	memmoveNoHeapPointers(unsafe.Pointer(ret), unsafe.Pointer(src), sz)
 
-	if debugMode {
+	if ac.acPool.debugMode {
 		if reflect.TypeOf(ret).Elem().Kind() == reflect.Struct {
 			ac.debugScan(ret)
 		}
@@ -165,7 +149,7 @@ func Append[T any](ac *Allocator, s []T, v T) []T {
 		cur := float64(h.Cap)
 		h.Cap = int64(cur * SliceExtendRatio)
 		// prefer to fit in a normal chunk.
-		if h.Cap > int64(ChunkSize) && SliceExtendRatio > 1.5 {
+		if h.Cap > int64(ac.acPool.chunkPool.ChunkSize) && SliceExtendRatio > 1.5 {
 			h.Cap = int64(cur * 1.5)
 		}
 

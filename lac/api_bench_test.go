@@ -10,6 +10,8 @@
 package lac
 
 import (
+	"flag"
+	"fmt"
 	"runtime"
 	"testing"
 )
@@ -142,7 +144,7 @@ func makeDataAc(ac *Allocator, i int) *PbDataEx {
 }
 
 func BenchmarkNew(b *testing.B) {
-	ac := Get()
+	ac := acPool.Get()
 	defer ac.Release()
 
 	var item *PbItem
@@ -154,7 +156,7 @@ func BenchmarkNew(b *testing.B) {
 }
 
 func BenchmarkNewFrom(b *testing.B) {
-	ac := Get()
+	ac := acPool.Get()
 	defer ac.Release()
 
 	var item *PbItem
@@ -185,11 +187,18 @@ func Benchmark_RawMalloc(t *testing.B) {
 	t.StopTimer()
 }
 
+var stats bool
+
+func init() {
+	flag.BoolVar(&stats, "stats", false, "")
+}
+
 func Benchmark_LacMalloc(t *testing.B) {
-	EnableDebugMode(false)
-	ReserveChunkPool(32 * 1024)
-	runtime.GC()
-	ac := Get()
+	acPool.EnableDebugMode(false)
+	ac := acPool.Get()
+	if stats {
+		defer func() { fmt.Println(acPool.DumpStats(true)) }()
+	}
 	defer ac.Release()
 
 	t.ResetTimer()
@@ -203,15 +212,15 @@ func Benchmark_LacMalloc(t *testing.B) {
 	}
 	runtime.KeepAlive(e)
 	t.StopTimer()
-	chunkPool.Clear()
 }
 
 func Benchmark_LacMallocMt(t *testing.B) {
-	EnableDebugMode(false)
-	ReserveChunkPool(32 * 1024)
-	runtime.GC()
-	ac := Get()
+	acPool.EnableDebugMode(false)
+	ac := acPool.Get()
 	ac.IncRef()
+	if stats {
+		defer func() { fmt.Println(acPool.DumpStats(true)) }()
+	}
 	defer ac.Release()
 
 	t.ResetTimer()
@@ -225,7 +234,6 @@ func Benchmark_LacMallocMt(t *testing.B) {
 	}
 	runtime.KeepAlive(e)
 	t.StopTimer()
-	chunkPool.Clear()
 }
 
 func Benchmark_RawMallocLarge2(t *testing.B) {
@@ -239,10 +247,13 @@ func Benchmark_RawMallocLarge2(t *testing.B) {
 }
 
 func Benchmark_LacMallocLarge2(t *testing.B) {
-	EnableDebugMode(false)
-	ReserveChunkPool(32 * 1024)
-	runtime.GC()
-	ac := Get()
+	acPool.EnableDebugMode(false)
+
+	ac := acPool.Get()
+	if stats {
+		defer func() { fmt.Println(acPool.DumpStats(true)) }()
+	}
+	defer ac.Release()
 
 	t.ResetTimer()
 	var e *PbDataEx
@@ -251,17 +262,16 @@ func Benchmark_LacMallocLarge2(t *testing.B) {
 	}
 	runtime.KeepAlive(e)
 	t.StopTimer()
-
-	ac.Release()
-	chunkPool.Clear()
 }
 
 func Benchmark_LacMallocLarge2Mt(t *testing.B) {
-	EnableDebugMode(false)
-	ReserveChunkPool(32 * 1024)
-	runtime.GC()
-	ac := Get()
+	acPool.EnableDebugMode(false)
+	ac := acPool.Get()
 	ac.IncRef()
+	if stats {
+		defer func() { fmt.Println(acPool.DumpStats(true)) }()
+	}
+	defer ac.Release()
 
 	t.ResetTimer()
 	var e *PbDataEx
@@ -270,7 +280,4 @@ func Benchmark_LacMallocLarge2Mt(t *testing.B) {
 	}
 	runtime.KeepAlive(e)
 	t.StopTimer()
-
-	ac.Release()
-	chunkPool.Clear()
 }

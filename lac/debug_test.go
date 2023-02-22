@@ -14,9 +14,11 @@ import (
 	"testing"
 )
 
+var acPool = NewAllocatorPool("test", 10000, 64*1024, 32*1000)
+
 func Test_CheckArray(t *testing.T) {
-	EnableDebugMode(true)
-	ac := Get()
+	acPool.EnableDebugMode(true)
+	ac := acPool.Get()
 
 	defer func() {
 		if err := recover(); err == nil {
@@ -37,8 +39,8 @@ func Test_CheckArray(t *testing.T) {
 }
 
 func Test_CheckInternalSlice(t *testing.T) {
-	EnableDebugMode(true)
-	ac := Get()
+	acPool.EnableDebugMode(true)
+	ac := acPool.Get()
 	defer ac.Release()
 
 	type D struct {
@@ -49,8 +51,8 @@ func Test_CheckInternalSlice(t *testing.T) {
 }
 
 func Test_CheckExternalSlice(t *testing.T) {
-	EnableDebugMode(true)
-	ac := Get()
+	acPool.EnableDebugMode(true)
+	ac := acPool.Get()
 
 	defer func() {
 		if err := recover(); err == nil {
@@ -73,8 +75,8 @@ func Test_CheckExternalSlice(t *testing.T) {
 }
 
 func Test_CheckKnownExternalSlice(t *testing.T) {
-	EnableDebugMode(true)
-	ac := Get()
+	acPool.EnableDebugMode(true)
+	ac := acPool.Get()
 	defer ac.Release()
 
 	defer func() {
@@ -96,11 +98,11 @@ func Test_CheckKnownExternalSlice(t *testing.T) {
 }
 
 func TestUseAfterFree_Pointer(t *testing.T) {
-	EnableDebugMode(true)
-	ac := Get()
+	acPool.EnableDebugMode(true)
+	ac := acPool.Get()
 
 	defer func() {
-		EnableDebugMode(false)
+		acPool.EnableDebugMode(false)
 		if err := recover(); err == nil {
 			t.Errorf("failed to check")
 		}
@@ -115,14 +117,14 @@ func TestUseAfterFree_Pointer(t *testing.T) {
 }
 
 func TestUseAfterFree_StructPointer(t *testing.T) {
-	EnableDebugMode(true)
+	acPool.EnableDebugMode(true)
+	ac := acPool.Get()
 	defer func() {
-		EnableDebugMode(false)
+		acPool.EnableDebugMode(false)
 		if err := recover(); err == nil {
 			t.Errorf("failed to check")
 		}
 	}()
-	ac := Get()
 
 	d := New[PbData](ac)
 	d.InUse = New[PbItem](ac)
@@ -134,15 +136,16 @@ func TestUseAfterFree_StructPointer(t *testing.T) {
 }
 
 func TestUseAfterFree_Slice(t *testing.T) {
-	EnableDebugMode(true)
+	acPool.EnableDebugMode(true)
+	ac := acPool.Get()
+
 	defer func() {
-		EnableDebugMode(false)
+		acPool.EnableDebugMode(false)
 		if err := recover(); err == nil {
 			t.Errorf("failed to check")
 		}
 	}()
 
-	ac := Get()
 	d := New[PbData](ac)
 	d.Items = NewSlice[*PbItem](ac, 1, 1)
 	ac.Release()
@@ -158,7 +161,7 @@ func Test_WorkWithGc(t *testing.T) {
 		v [10]*int
 	}
 
-	ac := Get()
+	ac := acPool.Get()
 	defer ac.Release()
 	d := New[D](ac)
 
@@ -177,8 +180,8 @@ func Test_WorkWithGc(t *testing.T) {
 }
 
 func Test_CheckNewMap(t *testing.T) {
-	EnableDebugMode(true)
-	ac := Get()
+	acPool.EnableDebugMode(true)
+	ac := acPool.Get()
 	defer ac.Release()
 
 	defer func() {
@@ -195,8 +198,8 @@ func Test_CheckNewMap(t *testing.T) {
 }
 
 func Test_CheckExternalMap(t *testing.T) {
-	EnableDebugMode(true)
-	ac := Get()
+	acPool.EnableDebugMode(true)
+	ac := acPool.Get()
 
 	defer func() {
 		if err := recover(); err == nil {
@@ -214,7 +217,7 @@ func Test_CheckExternalMap(t *testing.T) {
 }
 
 func Test_CheckExternalEnum(t *testing.T) {
-	ac := Get()
+	ac := acPool.Get()
 
 	defer func() {
 		if err := recover(); err == nil {
@@ -228,8 +231,8 @@ func Test_CheckExternalEnum(t *testing.T) {
 }
 
 func Test_LacAsField(t *testing.T) {
-	EnableDebugMode(true)
-	ac := Get()
+	acPool.EnableDebugMode(true)
+	ac := acPool.Get()
 	defer ac.Release()
 
 	defer func() {
@@ -247,8 +250,8 @@ func Test_LacAsField(t *testing.T) {
 }
 
 func Test_ClosureAsField(t *testing.T) {
-	EnableDebugMode(true)
-	ac := Get()
+	acPool.EnableDebugMode(true)
+	ac := acPool.Get()
 	defer ac.Release()
 
 	type S struct {
@@ -268,8 +271,8 @@ func Test_ClosureAsField(t *testing.T) {
 }
 
 func Test_ExternalClosure(t *testing.T) {
-	EnableDebugMode(true)
-	ac := Get()
+	acPool.EnableDebugMode(true)
+	ac := acPool.Get()
 
 	type S struct {
 		c func() any
@@ -290,8 +293,8 @@ func Test_ExternalClosure(t *testing.T) {
 }
 
 func Test_ShouldIgnoreFieldsOfMarkedExternal(t *testing.T) {
-	EnableDebugMode(true)
-	ac := Get()
+	acPool.EnableDebugMode(true)
+	ac := acPool.Get()
 	type D struct {
 		i *int
 	}

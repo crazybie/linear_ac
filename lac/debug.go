@@ -13,37 +13,35 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strings"
 	"sync"
-	"sync/atomic"
 	"unsafe"
 )
 
-type RuntimeStats struct {
-	SingleThreadAlloc atomic.Int64
-	MultiThreadAlloc  atomic.Int64
-	TotalAllocBytes   atomic.Int64
-	TotalChunks       atomic.Int64
-	TotalAllocator    atomic.Int64
-}
+func (p *AllocatorPool) DumpStats(reset bool) string {
+	chunksUsed := p.Stats.ChunksUsed.Load()
+	totalAllocBytes := p.Stats.TotalAllocBytes.Load()
+	utilization := float32(totalAllocBytes) / float32(int64(p.chunkPool.ChunkSize)*chunksUsed) * 100
 
-var Stats RuntimeStats
-
-func DumpStats(reset bool) string {
-	s := fmt.Sprintf("alloc(st):%v, alloc(mt):%v, bytes:%v, chunks:%v, chunks(pool):%v, lac:%v, lac(pool):%v",
-		Stats.SingleThreadAlloc.Load(),
-		Stats.MultiThreadAlloc.Load(),
-		Stats.TotalAllocBytes.Load(),
-		Stats.TotalChunks.Load(),
-		len(chunkPool.pool),
-		Stats.TotalAllocator.Load(),
-		len(acPool.pool),
+	s := fmt.Sprintf(`
+[stats]name:%s,
+[alloc]st:%v,mt:%v,bytes:%v,utilization:%.2f,
+[chunks]new:%v,used:%v,miss:%v,pool:%v,
+[lac]new:%v,pool:%v`,
+		p.Name,
+		p.Stats.SingleThreadAlloc.Load(), p.Stats.MultiThreadAlloc.Load(), totalAllocBytes, utilization,
+		p.chunkPool.Stats.TotalCreatedChunks.Load(), chunksUsed, p.Stats.ChunksMiss.Load(), len(p.chunkPool.pool),
+		p.Stats.TotalCreatedAc.Load(), len(p.pool),
 	)
+
 	if reset {
-		Stats.SingleThreadAlloc.Store(0)
-		Stats.MultiThreadAlloc.Store(0)
-		Stats.TotalAllocBytes.Store(0)
+		p.Stats.SingleThreadAlloc.Store(0)
+		p.Stats.MultiThreadAlloc.Store(0)
+		p.Stats.TotalAllocBytes.Store(0)
+		p.Stats.ChunksUsed.Store(0)
+		p.Stats.ChunksMiss.Store(0)
 	}
-	return s
+	return strings.ReplaceAll(s, "\n", "")
 }
 
 // Objects in sync.Pool will be recycled on demand by the system (usually after two GC).
@@ -51,22 +49,22 @@ func DumpStats(reset bool) string {
 // useful to diagnosis use-after-free bugs.
 var diagnosisChunkPool = sync.Pool{}
 
-func EnableDebugMode(v bool) {
-	debugMode = v
-	acPool.Debug = v
-	chunkPool.Debug = v
+func (p *AllocatorPool) EnableDebugMode(v bool) {
+	p.debugMode = v
+	p.Pool.Debug = v
+	p.chunkPool.Debug = v
 
 	// reload cfg
-	acPool.MaxNew = MaxNewLacInDebug
-	acPool.Cap = MaxLac
-	chunkPool.Cap = MaxChunks
+	p.MaxNew = MaxNewLacInDebug
+	p.Cap = p.MaxLac
+	p.chunkPool.Cap = p.chunkPool.MaxChunks
 }
 
 // DebugCheck check if all items from pool are all returned to pool.
 // useful for leak-checking.
-func DebugCheck() {
-	if debugMode {
-		acPool.DebugCheck()
+func (p *AllocatorPool) DebugCheck() {
+	if p.debugMode {
+		p.Pool.DebugCheck()
 
 		// chunks will be put to a syncPool instead of chunkPool for debugging purpose.
 		// chunkPool.DebugCheck()
