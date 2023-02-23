@@ -18,32 +18,6 @@ import (
 	"unsafe"
 )
 
-func (p *AllocatorPool) DumpStats(reset bool) string {
-	chunksUsed := p.Stats.ChunksUsed.Load()
-	totalAllocBytes := p.Stats.TotalAllocBytes.Load()
-	utilization := float32(totalAllocBytes) / float32(int64(p.chunkPool.ChunkSize)*chunksUsed) * 100
-
-	s := fmt.Sprintf(`
-[stats]name:%s,
-[alloc]st:%v,mt:%v,bytes:%v,utilization:%.2f,
-[chunks]new:%v,used:%v,miss:%v,pool:%v,
-[lac]new:%v,pool:%v`,
-		p.Name,
-		p.Stats.SingleThreadAlloc.Load(), p.Stats.MultiThreadAlloc.Load(), totalAllocBytes, utilization,
-		p.chunkPool.Stats.TotalCreatedChunks.Load(), chunksUsed, p.Stats.ChunksMiss.Load(), len(p.chunkPool.pool),
-		p.Stats.TotalCreatedAc.Load(), len(p.pool),
-	)
-
-	if reset {
-		p.Stats.SingleThreadAlloc.Store(0)
-		p.Stats.MultiThreadAlloc.Store(0)
-		p.Stats.TotalAllocBytes.Store(0)
-		p.Stats.ChunksUsed.Store(0)
-		p.Stats.ChunksMiss.Store(0)
-	}
-	return strings.ReplaceAll(s, "\n", "")
-}
-
 // Objects in sync.Pool will be recycled on demand by the system (usually after two GC).
 // we can put chunks here to make pointers live longer,
 // useful to diagnosis use-after-free bugs.
@@ -58,6 +32,34 @@ func (p *AllocatorPool) EnableDebugMode(v bool) {
 	p.MaxNew = MaxNewLacInDebug
 	p.Cap = p.MaxLac
 	p.chunkPool.Cap = p.chunkPool.MaxChunks
+}
+
+func (p *AllocatorPool) DumpStats(reset bool) string {
+	chunksUsed := p.Stats.ChunksUsed.Load()
+	allocBytes := p.Stats.AllocBytes.Load()
+	utilization := float32(allocBytes) / float32(int64(p.chunkPool.ChunkSize)*chunksUsed) * 100
+
+	s := fmt.Sprintf(`
+[stats]name:%s,
+[alloc]st:%v,mt:%v,bytes:%v,utilization:%.2f,
+[chunks]total_new:%v,used:%v,miss:%v,pool:%v,
+[lac]total_new:%v,pool:%v`,
+		p.Name,
+		p.Stats.SingleThreadAlloc.Load(), p.Stats.MultiThreadAlloc.Load(), allocBytes, utilization,
+		p.chunkPool.Stats.TotalCreatedChunks.Load(), chunksUsed, p.Stats.ChunksMiss.Load(), len(p.chunkPool.pool),
+		p.Stats.TotalCreatedAc.Load(), len(p.pool),
+	)
+	s = strings.ReplaceAll(s, "\n", "")
+
+	if reset {
+		p.Stats.SingleThreadAlloc.Store(0)
+		p.Stats.MultiThreadAlloc.Store(0)
+		p.Stats.AllocBytes.Store(0)
+		p.Stats.ChunksUsed.Store(0)
+		p.Stats.ChunksMiss.Store(0)
+	}
+
+	return s
 }
 
 // DebugCheck check if all items from pool are all returned to pool.
@@ -88,40 +90,40 @@ func (ac *Allocator) debugScan(obj any) {
 // 2. generate a recoverable panic.
 const nonNilPanickyAddr = uintptr(1)
 
-type PointerType int32
+type pointerType int32
 
 const (
-	PointerTypeInvalid PointerType = iota
-	PointerTypeLacInternal
-	PointerTypeExternal
-	PointerTypeExternalMarked
+	pointerTypeInvalid pointerType = iota
+	pointerTypeLacInternal
+	pointerTypeExternal
+	pointerTypeExternalMarked
 )
 
-func (ac *Allocator) checkPointerType(addr uintptr) PointerType {
+func (ac *Allocator) checkPointerType(addr uintptr) pointerType {
 
 	if addr == 0 || addr == nonNilPanickyAddr {
-		return PointerTypeLacInternal
+		return pointerTypeLacInternal
 	}
 
 	if addr == uintptr(unsafe.Pointer(ac)) {
-		return PointerTypeLacInternal
+		return pointerTypeLacInternal
 	}
 
 	for _, h := range ac.chunks {
 		if addr >= uintptr(h.Data) && addr < uintptr(h.Data)+uintptr(h.Cap) {
-			return PointerTypeLacInternal
+			return pointerTypeLacInternal
 		}
 	}
 
 	for _, c := range ac.externalPtr.slice {
 		if uintptr(c) == addr {
-			return PointerTypeExternalMarked
+			return pointerTypeExternalMarked
 		}
 	}
-	return PointerTypeExternal
+	return pointerTypeExternal
 }
 
-type CheckCtx struct {
+type checkCtx struct {
 	checked            map[interface{}]struct{}
 	unsupportedTypes   map[string]struct{}
 	invalidatePointers bool
@@ -129,7 +131,7 @@ type CheckCtx struct {
 
 // NOTE: all memories must be referenced by structs.
 func (ac *Allocator) debugCheck(invalidatePointers bool) {
-	ctx := &CheckCtx{
+	ctx := &checkCtx{
 		checked:            map[interface{}]struct{}{},
 		unsupportedTypes:   map[string]struct{}{},
 		invalidatePointers: invalidatePointers,
@@ -148,11 +150,11 @@ func (ac *Allocator) debugCheck(invalidatePointers bool) {
 	}
 }
 
-func (ac *Allocator) checkRecursively(val reflect.Value, ctx *CheckCtx) error {
+func (ac *Allocator) checkRecursively(val reflect.Value, ctx *checkCtx) error {
 	if val.Kind() == reflect.Ptr {
 		if val.Pointer() != nonNilPanickyAddr && !val.IsNil() {
 			pt := ac.checkPointerType(val.Pointer())
-			if pt == PointerTypeExternal {
+			if pt == pointerTypeExternal {
 				return fmt.Errorf("unexpected external pointer: %+v", val)
 			}
 
@@ -162,7 +164,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, ctx *CheckCtx) error {
 				return nil
 			}
 
-			if pt == PointerTypeLacInternal && tp.Kind() == reflect.Struct {
+			if pt == pointerTypeLacInternal && tp.Kind() == reflect.Struct {
 				if err := ac.checkRecursively(val.Elem(), ctx); err != nil {
 					return err
 				}
@@ -207,10 +209,10 @@ func (ac *Allocator) checkRecursively(val reflect.Value, ctx *CheckCtx) error {
 						}
 					}
 					pt := ac.checkPointerType(uintptr(h.Data))
-					if !found && pt == PointerTypeExternal {
+					if !found && pt == pointerTypeExternal {
 						return fmt.Errorf("%s: unexpected external slice: %s", fieldName(i), f.String())
 					}
-					if pt == PointerTypeLacInternal {
+					if pt == pointerTypeLacInternal {
 						for j := 0; j < f.Len(); j++ {
 							if err := ac.checkRecursively(f.Index(j), ctx); err != nil {
 								return fmt.Errorf("%v: %v", fieldName(i), err)
@@ -260,7 +262,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, ctx *CheckCtx) error {
 						}
 					}
 					pt := ac.checkPointerType(uintptr(h.Data))
-					if !found && pt == PointerTypeExternal {
+					if !found && pt == pointerTypeExternal {
 						return fmt.Errorf("%s: unexpected external string: %s", fieldName(i), f.String())
 					}
 				}
@@ -298,7 +300,7 @@ var unsupportedTypes = struct {
 	m map[string]struct{}
 }{m: map[string]struct{}{}}
 
-func dumpUnsupportedTypes(ctx *CheckCtx) {
+func dumpUnsupportedTypes(ctx *checkCtx) {
 	unsupportedTypes.Lock()
 	for k := range ctx.unsupportedTypes {
 		if _, ok := unsupportedTypes.m[k]; !ok {

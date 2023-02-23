@@ -32,11 +32,12 @@ type ChunkPool struct {
 	}
 }
 
-func NewChunkPool(name string, chunkSz, defaultChunks, maxChunks int) *ChunkPool {
+func newChunkPool(name string, chunkSz, defaultChunks, maxChunks int) *ChunkPool {
 	r := &ChunkPool{
 		Pool: Pool[*sliceHeader]{
 			Name:  fmt.Sprintf("LacChunkPool(%s)", name),
-			Equal: func(a, b *sliceHeader) bool { return a == b },
+			Equal: eq[*sliceHeader],
+			Cap:   maxChunks,
 		},
 		ChunkSize: chunkSz,
 		MaxChunks: maxChunks,
@@ -47,7 +48,7 @@ func NewChunkPool(name string, chunkSz, defaultChunks, maxChunks int) *ChunkPool
 		r.Stats.TotalCreatedChunks.Add(1)
 		return (*sliceHeader)(unsafe.Pointer(&c))
 	}
-	r.Pool.Cap = r.MaxChunks
+
 	r.Reserve(defaultChunks)
 
 	return r
@@ -56,24 +57,24 @@ func NewChunkPool(name string, chunkSz, defaultChunks, maxChunks int) *ChunkPool
 // Allocator Pool
 
 type AllocatorPool struct {
-	Pool[*Allocator]
+	debugMode bool
 	MaxLac    int
 	chunkPool *ChunkPool
 	Name      string
-	debugMode bool
+	Pool[*Allocator]
 
 	Stats struct {
 		TotalCreatedAc    atomic.Int64
 		SingleThreadAlloc atomic.Int64
 		MultiThreadAlloc  atomic.Int64
-		TotalAllocBytes   atomic.Int64
+		AllocBytes        atomic.Int64
 		ChunksUsed        atomic.Int64
 		ChunksMiss        atomic.Int64
 	}
 }
 
 func NewAllocatorPool(name string, poolCap, chunkSz, defaultChunks, maxChunks int) *AllocatorPool {
-	chunkPool := NewChunkPool(name, chunkSz, defaultChunks, maxChunks)
+	chunkPool := newChunkPool(name, chunkSz, defaultChunks, maxChunks)
 
 	r := &AllocatorPool{
 		Name:      name,
@@ -81,7 +82,7 @@ func NewAllocatorPool(name string, poolCap, chunkSz, defaultChunks, maxChunks in
 		Pool: Pool[*Allocator]{
 			Name:   fmt.Sprintf("LacPool(%s)", name),
 			Cap:    poolCap,
-			Equal:  func(a, b *Allocator) bool { return a == b },
+			Equal:  eq[*Allocator],
 			MaxNew: MaxNewLacInDebug,
 		},
 	}
@@ -93,41 +94,41 @@ func NewAllocatorPool(name string, poolCap, chunkSz, defaultChunks, maxChunks in
 // Allocator
 
 type Allocator struct {
-	disabled        bool
-	chunks          []*sliceHeader
-	chunksLock      SpinLock
-	curChunk        unsafe.Pointer //*sliceHeader
-	refCnt          int32
-	TotalAllocBytes int32
-	acPool          *AllocatorPool
+	disabled   bool
+	refCnt     atomic.Int32
+	chunks     []*sliceHeader
+	chunksLock spinLock
+	curChunk   unsafe.Pointer //*sliceHeader
+	acPool     *AllocatorPool
 
 	// NOTE:
 	// To keep these externals alive, slices must be alloc from raw allocator to make them
 	// available to the GC. never alloc them from Lac itself.
-	externalPtr    WeakUniqQueue[unsafe.Pointer]
-	externalSlice  WeakUniqQueue[unsafe.Pointer]
-	externalString WeakUniqQueue[unsafe.Pointer]
-	externalMap    WeakUniqQueue[any]
-	externalFunc   WeakUniqQueue[any]
+	externalPtr    weakUniqQueue[unsafe.Pointer]
+	externalSlice  weakUniqQueue[unsafe.Pointer]
+	externalString weakUniqQueue[unsafe.Pointer]
+	externalMap    weakUniqQueue[any]
+	externalFunc   weakUniqQueue[any]
 
-	dbgScanObjs WeakUniqQueue[any]
+	dbgScanObjs weakUniqQueue[any]
 }
 
 func newLac(acPool *AllocatorPool) *Allocator {
 	ac := &Allocator{
 		disabled: DisableAllLac,
-		refCnt:   1,
 		chunks:   make([]*sliceHeader, 0, 4),
 		acPool:   acPool,
 
-		externalPtr:    NewWeakUniqQueue(32, unsafePtrEq),
-		externalSlice:  NewWeakUniqQueue(32, unsafePtrEq),
-		externalString: NewWeakUniqQueue(32, unsafePtrEq),
-		externalMap:    NewWeakUniqQueue(32, anyEq),
-		externalFunc:   NewWeakUniqQueue(32, interfaceEqual),
+		externalPtr:    newWeakUniqQueue(32, eq[unsafe.Pointer]),
+		externalSlice:  newWeakUniqQueue(32, eq[unsafe.Pointer]),
+		externalString: newWeakUniqQueue(32, eq[unsafe.Pointer]),
+		externalMap:    newWeakUniqQueue(32, anyEq),
+		externalFunc:   newWeakUniqQueue(32, interfaceEqual),
 
-		dbgScanObjs: NewWeakUniqQueue(math.MaxInt, anyEq),
+		dbgScanObjs: newWeakUniqQueue(math.MaxInt, anyEq),
 	}
+
+	ac.refCnt.Store(1)
 
 	acPool.Stats.TotalCreatedAc.Add(1)
 	return ac
@@ -136,14 +137,15 @@ func newLac(acPool *AllocatorPool) *Allocator {
 // alloc auto select single-thread or multi-thread algo.
 // multi-thread version uses lock-free algorithm to reduce locking.
 func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
-	needAligned := (need + PtrSize + 1) & ^(PtrSize - 1)
+	needAligned := (need + ptrSize + 1) & ^(ptrSize - 1)
 	chunkPool := ac.acPool.chunkPool
+	stats := &ac.acPool.Stats
 	var header, new_ *sliceHeader
 	var len_, cap_ int64
 
 	// single-threaded path
-	if atomic.LoadInt32(&ac.refCnt) == 1 {
-		ac.acPool.Stats.SingleThreadAlloc.Add(1)
+	if ac.refCnt.Load() == 1 {
+		stats.SingleThreadAlloc.Add(1)
 
 		for {
 			if ac.curChunk != nil {
@@ -151,6 +153,7 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 				len_ = header.Len
 				cap_ = header.Cap
 			}
+
 			if len_+int64(needAligned) > cap_ {
 				if needAligned > chunkPool.ChunkSize {
 					t := make(chunk, 0, need)
@@ -166,15 +169,14 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 				if zero {
 					memclrNoHeapPointers(ptr, uintptr(needAligned))
 				}
-				ac.TotalAllocBytes += int32(needAligned)
-				ac.acPool.Stats.TotalAllocBytes.Add(int64(needAligned))
+				stats.AllocBytes.Add(int64(needAligned))
 				return ptr
 			}
 		}
 	}
 
 	// multi-threaded path
-	ac.acPool.Stats.MultiThreadAlloc.Add(1)
+	stats.MultiThreadAlloc.Add(1)
 	for {
 		cur := atomic.LoadPointer(&ac.curChunk)
 		if cur != nil {
@@ -203,8 +205,7 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 				if zero {
 					memclrNoHeapPointers(ptr, uintptr(needAligned))
 				}
-				atomic.AddInt32(&ac.TotalAllocBytes, int32(needAligned))
-				ac.acPool.Stats.TotalAllocBytes.Add(int64(needAligned))
+				stats.AllocBytes.Add(int64(needAligned))
 				return ptr
 			}
 		}
@@ -258,8 +259,7 @@ func (ac *Allocator) reset() {
 	ac.externalFunc.Clear()
 
 	ac.disabled = DisableAllLac
-	atomic.StoreInt32(&ac.refCnt, 1)
-	ac.TotalAllocBytes = 0
+	ac.refCnt.Store(1)
 }
 
 func (ac *Allocator) keepAlive(ptr interface{}) {

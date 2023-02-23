@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"testing"
 )
 
@@ -83,7 +82,7 @@ func Test_Alignment(t *testing.T) {
 
 	for i := 0; i < 1024; i++ {
 		p := ac.alloc(i, false)
-		if (uintptr(p) & uintptr(PtrSize-1)) != 0 {
+		if (uintptr(p) & uintptr(ptrSize-1)) != 0 {
 			t.Fail()
 		}
 	}
@@ -430,7 +429,7 @@ func TestSharedAc_NoRace(t *testing.T) {
 
 	ac.DecRef()
 	wg.Wait()
-	if n := atomic.LoadInt32(&ac.refCnt); n != 1 {
+	if n := ac.refCnt.Load(); n != 1 {
 		t.Errorf("ref cnt:%v", n)
 	}
 }

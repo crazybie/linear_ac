@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-var acPool = NewAllocatorPool("test", 10000, 64*1024, 32*1000)
+var acPool = NewAllocatorPool("test", 10000, 64*1024, 32*1000, 64*1000)
 
 func Test_CheckArray(t *testing.T) {
 	acPool.EnableDebugMode(true)

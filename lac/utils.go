@@ -16,10 +16,10 @@ import (
 	"unsafe"
 )
 
-const PtrSize = int(unsafe.Sizeof(uintptr(0)))
+const ptrSize = int(unsafe.Sizeof(uintptr(0)))
 
 func init() {
-	if PtrSize != 8 {
+	if ptrSize != 8 {
 		panic("expect 64bit platform")
 	}
 }
@@ -93,46 +93,46 @@ func resetSlice[T any](s []T) []T {
 // Spin lock
 //============================================================================
 
-type SpinLock int32
+type spinLock int32
 
-func (s *SpinLock) Lock() {
+func (s *spinLock) Lock() {
 	for !atomic.CompareAndSwapInt32((*int32)(s), 0, 1) {
 		runtime.Gosched()
 	}
 }
 
-func (s *SpinLock) Unlock() {
+func (s *spinLock) Unlock() {
 	atomic.StoreInt32((*int32)(s), 0)
 }
 
 //============================================================================
-// WeakUniqQueue
+// weakUniqQueue
 //============================================================================
 
-// WeakUniqQueue is used to reduce the duplication of elems in queue.
+// weakUniqQueue is used to reduce the duplication of elems in queue.
 // the major purpose is to reduce memory usage.
-type WeakUniqQueue[T any] struct {
-	SpinLock
-	slice           []T
-	strongUniqRange int
-	equal           func(a, b T) bool
+type weakUniqQueue[T any] struct {
+	spinLock
+	slice     []T
+	uniqRange int
+	equal     func(a, b T) bool
 }
 
-func NewWeakUniqQueue[T any](strongUniqRange int, eq func(a, b T) bool) WeakUniqQueue[T] {
-	return WeakUniqQueue[T]{equal: eq, strongUniqRange: strongUniqRange}
+func newWeakUniqQueue[T any](uniqRange int, eq func(a, b T) bool) weakUniqQueue[T] {
+	return weakUniqQueue[T]{equal: eq, uniqRange: uniqRange}
 }
 
-func (e *WeakUniqQueue[T]) Clear() {
+func (e *weakUniqQueue[T]) Clear() {
 	e.Lock()
 	defer e.Unlock()
 	e.slice = nil
 }
 
-func (e *WeakUniqQueue[T]) Put(a T) {
+func (e *weakUniqQueue[T]) Put(a T) {
 	e.Lock()
 	defer e.Unlock()
 	if l := len(e.slice); l > 0 {
-		if l < e.strongUniqRange {
+		if l < e.uniqRange {
 			for _, k := range e.slice {
 				if e.equal(k, a) {
 					return
@@ -147,10 +147,10 @@ func (e *WeakUniqQueue[T]) Put(a T) {
 	e.slice = append(e.slice, a)
 }
 
-func unsafePtrEq(a, b unsafe.Pointer) bool {
+func anyEq(a, b any) bool {
 	return a == b
 }
 
-func anyEq(a, b any) bool {
+func eq[T comparable](a, b T) bool {
 	return a == b
 }

@@ -21,16 +21,24 @@ import (
 )
 
 type Pool[T any] struct {
-	Name   string
-	m      SpinLock
+	m      spinLock
 	New    func() T
 	pool   []T
 	Cap    int
 	newCnt int
 
-	Debug  bool
-	MaxNew int               // require Debug=true
-	Equal  func(a, b T) bool // require Debug=true
+	Debug bool
+	Name  string
+
+	// require Debug=true
+	// the max count of call to New function.
+	// for debugging.
+	MaxNew int
+
+	// require Debug=true
+	// check duplicated put.
+	// for debugging.
+	Equal func(a, b T) bool
 }
 
 func (p *Pool[T]) Get() T {
@@ -96,8 +104,9 @@ func (p *Pool[T]) Reserve(cnt int) {
 
 func (p *Pool[T]) DebugCheck() {
 	if p.Debug {
-		if len(p.pool) != p.newCnt {
-			panic(fmt.Errorf("%s: %d leaked. cur:%v,max: %v", p.Name, p.newCnt-len(p.pool), p.newCnt, len(p.pool)))
+		l := len(p.pool)
+		if l != p.newCnt {
+			panic(fmt.Errorf("%s: %d leaked. cur:%v,max: %v", p.Name, p.newCnt-l, p.newCnt, l))
 		}
 	}
 }

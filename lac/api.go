@@ -12,7 +12,6 @@ package lac
 import (
 	"fmt"
 	"reflect"
-	"sync/atomic"
 	"unsafe"
 )
 
@@ -48,7 +47,7 @@ func (ac *Allocator) IncRef() {
 	if ac == nil || ac.disabled {
 		return
 	}
-	atomic.AddInt32(&ac.refCnt, 1)
+	ac.refCnt.Add(1)
 }
 
 // DecRef will put the ac back into Pool if ref count reduced to zero.
@@ -58,7 +57,7 @@ func (ac *Allocator) DecRef() {
 	if ac == nil || ac.disabled {
 		return
 	}
-	if n := atomic.AddInt32(&ac.refCnt, -1); n <= 0 {
+	if n := ac.refCnt.Add(-1); n <= 0 {
 		if ac.acPool.debugMode && n < 0 {
 			panic(fmt.Errorf("potential bug: ref cnt is negative: %v", n))
 		}
