@@ -16,28 +16,20 @@
 
 package lac
 
-import (
-	"fmt"
-)
-
 type Pool[T any] struct {
+	Logger
 	m      spinLock
 	New    func() T
 	pool   []T
 	Cap    int
 	newCnt int
-
-	Debug bool
-	Name  string
-
-	// require Debug=true
 	// the max count of call to New function.
-	// for debugging.
 	MaxNew int
+	Name   string
 
-	// require Debug=true
+	CheckDuplication bool
+	// require CheckDuplication=true
 	// check duplicated put.
-	// for debugging.
 	Equal func(a, b T) bool
 }
 
@@ -59,8 +51,8 @@ func (p *Pool[T]) Get() T {
 
 func (p *Pool[T]) doNew() T {
 	p.newCnt++
-	if p.Debug && p.MaxNew > 0 && p.newCnt > p.MaxNew {
-		panic(fmt.Errorf("%s: pool exhausted (%v), potential leak", p.Name, p.MaxNew))
+	if p.MaxNew > 0 && p.newCnt > p.MaxNew {
+		errorf(p, "%s: pool exhausted (%v), potential leak", p.Name, p.MaxNew)
 	}
 	return p.New()
 }
@@ -69,15 +61,15 @@ func (p *Pool[T]) Put(v T) bool {
 	p.m.Lock()
 	defer p.m.Unlock()
 
-	if p.Debug && p.Equal != nil {
+	if p.CheckDuplication && p.Equal != nil {
 		for _, i := range p.pool {
 			if p.Equal(i, v) {
-				panic(fmt.Errorf("%s: duplicated: %v, %v", p.Name, i, v))
+				errorf(p, "%s: duplicated: %v, %v", p.Name, i, v)
 			}
 		}
 	}
 
-	if (p.Cap == 0 || len(p.pool) < p.Cap) || p.Debug {
+	if (p.Cap == 0 || len(p.pool) < p.Cap) || p.CheckDuplication {
 		p.pool = append(p.pool, v)
 		return true
 	} else {
@@ -103,10 +95,8 @@ func (p *Pool[T]) Reserve(cnt int) {
 }
 
 func (p *Pool[T]) DebugCheck() {
-	if p.Debug {
-		l := len(p.pool)
-		if l != p.newCnt {
-			panic(fmt.Errorf("%s: %d leaked. cur:%v,max: %v", p.Name, p.newCnt-l, p.newCnt, l))
-		}
+	l := len(p.pool)
+	if l != p.newCnt {
+		errorf(p, "%s: %d leaked. cur:%v,max: %v", p.Name, p.newCnt-l, p.newCnt, l)
 	}
 }

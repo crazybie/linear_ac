@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-var acPool = NewAllocatorPool("test", 10000, 64*1024, 32*1000, 64*1000)
+var acPool = NewAllocatorPool("test", nil, 10000, 64*1024, 32*1000, 64*1000)
 
 func Test_CheckArray(t *testing.T) {
 	acPool.EnableDebugMode(true)
@@ -304,4 +304,15 @@ func Test_ShouldIgnoreFieldsOfMarkedExternal(t *testing.T) {
 	s := New[S](ac)
 	s.sub = Attach(ac, &D{i: new(int)})
 	ac.Release()
+}
+
+func TestValidityCheck(t *testing.T) {
+	ac := acPool.Get()
+	ac.Release()
+	defer func() {
+		if err := recover(); err == nil {
+			t.Errorf("should panic")
+		}
+	}()
+	_ = New[int](ac)
 }

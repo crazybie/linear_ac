@@ -13,9 +13,9 @@ import "testing"
 
 func Test_PoolDebug(t *testing.T) {
 	p := Pool[int]{
-		Debug: true,
-		New:   func() int { return 0 },
-		Equal: func(a, b int) bool { return a == b },
+		CheckDuplication: true,
+		New:              func() int { return 0 },
+		Equal:            func(a, b int) bool { return a == b },
 	}
 	defer func() {
 		if err := recover(); err == nil {
@@ -40,9 +40,9 @@ func Test_PoolMemLeak(t *testing.T) {
 
 func Test_PoolExceedMaxNew(t *testing.T) {
 	p := Pool[int]{
-		New:    func() int { return 0 },
-		Debug:  true,
-		MaxNew: 2,
+		New:              func() int { return 0 },
+		CheckDuplication: true,
+		MaxNew:           2,
 	}
 
 	defer func() {

@@ -10,16 +10,25 @@
 package lac
 
 import (
-	"fmt"
 	"reflect"
 	"unsafe"
+)
+
+var (
+	DisableAllLac = false
+
+	// our memory is much cheaper than systems,
+	// so we can be more aggressive than `append`.
+	SliceExtendRatio = 2.5
 )
 
 func (p *AllocatorPool) Get() *Allocator {
 	if p == nil || DisableAllLac {
 		return nil
 	}
-	return p.Pool.Get()
+	ac := p.Pool.Get()
+	ac.valid = true
+	return ac
 }
 
 func (ac *Allocator) Release() {
@@ -30,23 +39,30 @@ func (ac *Allocator) Release() {
 	ac.acPool.Put(ac)
 }
 
-// IncRef should be used at outside the new goroutine, e.g.
+// IncRef should be called before and outside the new goroutine, never be in the new goroutine,
+// otherwise the execution of new goroutine may be delayed after the caller quit,
+// which may cause a UseAfterFree error. e.g.
 //
-//	ac.IncRef() // <- should be called outside the new goroutine.
+//	ac.IncRef() // <<<- Correct usage. should be called before and outside the new goroutine.
 //	go func() {
-//		// ac.IncRef() <<<- Incorrect usage!!!!
+//
+//		// ac.IncRef() <<<- !!!!!!! Incorrect usage !!!!!!!!!!!!
+//
 //		defer ac.DecRef()
 //		....
 //	}()
 //
-// not in the new goroutine, otherwise the execution of new goroutine may be delayed after the caller quit,
-// which may cause a UseAfterFree error.
-// if IncRef is not call correctly the Lac will be recycled ahead of time, in debug mode your Lac allocated
-// objects become corrupted and panic occurs when using them.
+// if IncRef is not call correctly the Lac will be recycled ahead of time,
+// in debug mode your Lac allocated objects become corrupted and panic occurs when using them.
+// UseAfterFree can also be caught by the validity check in release mode.
+//
+// This appointment also ensure the single-threaded version will never run in parallel with
+// the multi-threaded version.
 func (ac *Allocator) IncRef() {
 	if ac == nil || ac.disabled {
 		return
 	}
+	ac.checkValidity()
 	ac.refCnt.Add(1)
 }
 
@@ -57,9 +73,10 @@ func (ac *Allocator) DecRef() {
 	if ac == nil || ac.disabled {
 		return
 	}
+	ac.checkValidity()
 	if n := ac.refCnt.Add(-1); n <= 0 {
-		if ac.acPool.debugMode && n < 0 {
-			panic(fmt.Errorf("potential bug: ref cnt is negative: %v", n))
+		if n < 0 {
+			errorf(ac.acPool, "potential bug: ref cnt is negative: %v", n)
 		}
 		ac.Release()
 	}

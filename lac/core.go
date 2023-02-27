@@ -32,12 +32,13 @@ type ChunkPool struct {
 	}
 }
 
-func newChunkPool(name string, chunkSz, defaultChunks, maxChunks int) *ChunkPool {
+func newChunkPool(name string, logger Logger, chunkSz, defaultChunks, maxChunks int) *ChunkPool {
 	r := &ChunkPool{
 		Pool: Pool[*sliceHeader]{
-			Name:  fmt.Sprintf("LacChunkPool(%s)", name),
-			Equal: eq[*sliceHeader],
-			Cap:   maxChunks,
+			Logger: logger,
+			Name:   fmt.Sprintf("LacChunkPool(%s)", name),
+			Equal:  eq[*sliceHeader],
+			Cap:    maxChunks,
 		},
 		ChunkSize: chunkSz,
 		MaxChunks: maxChunks,
@@ -57,11 +58,13 @@ func newChunkPool(name string, chunkSz, defaultChunks, maxChunks int) *ChunkPool
 // Allocator Pool
 
 type AllocatorPool struct {
+	Logger
+	Pool[*Allocator]
+
 	debugMode bool
 	MaxLac    int
 	chunkPool *ChunkPool
 	Name      string
-	Pool[*Allocator]
 
 	Stats struct {
 		TotalCreatedAc    atomic.Int64
@@ -73,17 +76,18 @@ type AllocatorPool struct {
 	}
 }
 
-func NewAllocatorPool(name string, poolCap, chunkSz, defaultChunks, maxChunks int) *AllocatorPool {
-	chunkPool := newChunkPool(name, chunkSz, defaultChunks, maxChunks)
+func NewAllocatorPool(name string, logger Logger, poolCap, chunkSz, defaultChunks, maxChunks int) *AllocatorPool {
+	chunkPool := newChunkPool(name, logger, chunkSz, defaultChunks, maxChunks)
 
 	r := &AllocatorPool{
 		Name:      name,
+		Logger:    logger,
 		chunkPool: chunkPool,
 		Pool: Pool[*Allocator]{
 			Name:   fmt.Sprintf("LacPool(%s)", name),
 			Cap:    poolCap,
 			Equal:  eq[*Allocator],
-			MaxNew: MaxNewLacInDebug,
+			MaxNew: poolCap * 100,
 		},
 	}
 	r.Pool.New = func() *Allocator { return newLac(r) }
@@ -95,6 +99,7 @@ func NewAllocatorPool(name string, poolCap, chunkSz, defaultChunks, maxChunks in
 
 type Allocator struct {
 	disabled   bool
+	valid      bool
 	refCnt     atomic.Int32
 	chunks     []*sliceHeader
 	chunksLock spinLock
@@ -142,6 +147,8 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 	stats := &ac.acPool.Stats
 	var header, new_ *sliceHeader
 	var len_, cap_ int64
+
+	ac.checkValidity()
 
 	// single-threaded path
 	if ac.refCnt.Load() == 1 {
@@ -259,6 +266,7 @@ func (ac *Allocator) reset() {
 	ac.externalFunc.Clear()
 
 	ac.disabled = DisableAllLac
+	ac.valid = false
 	ac.refCnt.Store(1)
 }
 

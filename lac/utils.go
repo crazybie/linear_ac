@@ -10,17 +10,33 @@
 package lac
 
 import (
+	"fmt"
 	"reflect"
 	"runtime"
 	"sync/atomic"
 	"unsafe"
 )
 
-const ptrSize = int(unsafe.Sizeof(uintptr(0)))
+const (
+	flagIndir uintptr = 1 << 7
+	ptrSize           = int(unsafe.Sizeof(uintptr(0)))
+)
 
 func init() {
 	if ptrSize != 8 {
 		panic("expect 64bit platform")
+	}
+	if unsafe.Sizeof(sliceHeader{}) != unsafe.Sizeof(reflect.SliceHeader{}) {
+		panic("ABI not match")
+	}
+	if unsafe.Sizeof(stringHeader{}) != unsafe.Sizeof(reflect.StringHeader{}) {
+		panic("ABI not match")
+	}
+	if unsafe.Sizeof((any)(nil)) != unsafe.Sizeof(emptyInterface{}) {
+		panic("ABI not match")
+	}
+	if unsafe.Sizeof(reflectedValue{}) != unsafe.Sizeof(reflect.Value{}) {
+		panic("ABI not match")
 	}
 }
 
@@ -45,10 +61,6 @@ type reflectedValue struct {
 	Ptr  unsafe.Pointer
 	flag uintptr
 }
-
-const (
-	flagIndir uintptr = 1 << 7
-)
 
 //go:linkname memclrNoHeapPointers reflect.memclrNoHeapPointers
 //go:noescape
@@ -100,6 +112,18 @@ func max[T number](a, b T) T {
 		return a
 	}
 	return b
+}
+
+type Logger interface {
+	Errorf(format string, args ...interface{})
+}
+
+func errorf(logger Logger, format string, args ...any) {
+	if logger != nil {
+		logger.Errorf(format, args...)
+	} else {
+		panic(fmt.Errorf(format, args...))
+	}
 }
 
 //============================================================================

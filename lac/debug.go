@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"unsafe"
@@ -25,13 +26,8 @@ var diagnosisChunkPool = sync.Pool{}
 
 func (p *AllocatorPool) EnableDebugMode(v bool) {
 	p.debugMode = v
-	p.Pool.Debug = v
-	p.chunkPool.Debug = v
-
-	// reload cfg
-	p.MaxNew = MaxNewLacInDebug
-	p.Cap = p.MaxLac
-	p.chunkPool.Cap = p.chunkPool.MaxChunks
+	p.Pool.CheckDuplication = v
+	p.chunkPool.CheckDuplication = v
 }
 
 func (p *AllocatorPool) DumpStats(reset bool) string {
@@ -72,6 +68,16 @@ func (p *AllocatorPool) DebugCheck() {
 		// chunkPool.DebugCheck()
 
 		fmt.Printf("Lac: debug check done.\n")
+	}
+}
+
+func (ac *Allocator) checkValidity() {
+	if !ac.valid {
+		stack := "<stack disabled in release mode>"
+		if ac.acPool.debugMode {
+			stack = string(debug.Stack())
+		}
+		errorf(ac.acPool, "[%v]: lac already be recycled: %v", ac.acPool.Name, stack)
 	}
 }
 
