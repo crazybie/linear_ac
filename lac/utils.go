@@ -89,6 +89,19 @@ func resetSlice[T any](s []T) []T {
 	return s[:0]
 }
 
+type number interface {
+	~int8 | ~int16 | ~int | ~int32 | ~int64 |
+		~uint8 | ~uint16 | ~uint | ~uint32 | ~uint64 |
+		~float32 | ~float64
+}
+
+func max[T number](a, b T) T {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 //============================================================================
 // Spin lock
 //============================================================================

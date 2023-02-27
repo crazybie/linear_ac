@@ -134,22 +134,30 @@ func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
 	return r
 }
 
-func Append[T any](ac *Allocator, s []T, v T) []T {
+func Append[T any](ac *Allocator, s []T, elems ...T) []T {
 	if ac == nil || ac.disabled {
-		return append(s, v)
+		return append(s, elems...)
+	}
+
+	if len(elems) == 0 {
+		return s
 	}
 
 	h := (*sliceHeader)(unsafe.Pointer(&s))
-	elemSz := int(unsafe.Sizeof(v))
+	elemSz := int(unsafe.Sizeof(elems[0]))
+
 	// grow
 	if h.Len >= h.Cap {
 		pre := *h
 
 		cur := float64(h.Cap)
-		h.Cap = int64(cur * SliceExtendRatio)
+		h.Cap = max(int64(cur*SliceExtendRatio), pre.Cap+int64(len(elems)))
 		// prefer to fit in a normal chunk.
 		if h.Cap > int64(ac.acPool.chunkPool.ChunkSize) && SliceExtendRatio > 1.5 {
-			h.Cap = int64(cur * 1.5)
+			small := int64(cur * 1.5)
+			if small > pre.Cap+int64(len(elems)) {
+				h.Cap = small
+			}
 		}
 
 		if h.Cap == 0 {
@@ -158,11 +166,12 @@ func Append[T any](ac *Allocator, s []T, v T) []T {
 		h.Data = ac.alloc(int(h.Cap)*elemSz, false)
 		memmoveNoHeapPointers(h.Data, pre.Data, uintptr(int(pre.Len)*elemSz))
 	}
+
 	// append
-	if h.Len < h.Cap {
-		memmoveNoHeapPointers(unsafe.Add(h.Data, elemSz*int(h.Len)), unsafe.Pointer(&v), uintptr(elemSz))
-		h.Len++
-	}
+	src := (*sliceHeader)(unsafe.Pointer(&elems))
+	memmoveNoHeapPointers(unsafe.Add(h.Data, elemSz*int(h.Len)), src.Data, uintptr(elemSz*int(src.Len)))
+	h.Len += src.Len
+
 	return s
 }
 
