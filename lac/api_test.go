@@ -13,7 +13,9 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 type EnumA int32
@@ -432,4 +434,50 @@ func TestSharedAc_NoRace(t *testing.T) {
 	if n := ac.refCnt.Load(); n != 1 {
 		t.Errorf("ref cnt:%v", n)
 	}
+}
+
+func TestReinitPool(t *testing.T) {
+	acPool.EnableDebugMode(true)
+
+	var running atomic.Bool
+	running.Store(true)
+
+	wg := sync.WaitGroup{}
+	wg.Add(100)
+	for j := 0; j < 100; j++ {
+
+		go func() {
+
+			for running.Load() {
+
+				ac := acPool.Get()
+
+				i := New[PbItem](ac)
+				i.Class = ac.Int(100)
+				i.Id = ac.Int(200)
+
+				time.Sleep(time.Duration(1) * time.Millisecond)
+
+				if *i.Class != 100 || *i.Id != 200 {
+					t.Fail()
+					break
+				}
+
+				runtime.KeepAlive(i)
+				ac.DecRef()
+			}
+
+			wg.Done()
+		}()
+	}
+
+	time.Sleep(time.Duration(1) * time.Microsecond)
+
+	acPool = NewAllocatorPool("test", nil, 10000, 64*1024, 32*1000, 64*1000)
+	// force to recycle the old pool.
+	runtime.GC()
+	time.Sleep(time.Duration(10) * time.Microsecond)
+
+	running.Store(false)
+	wg.Wait()
 }

@@ -25,28 +25,25 @@ type ChunkPool struct {
 	Pool[*sliceHeader]
 
 	ChunkSize int
-	MaxChunks int
-
-	Stats struct {
-		TotalCreatedChunks atomic.Int64
+	Stats     struct {
+		TotalCreated atomic.Int64
 	}
 }
 
-func newChunkPool(name string, logger Logger, chunkSz, defaultChunks, maxChunks int) *ChunkPool {
+func newChunkPool(name string, logger Logger, chunkSz, defaultChunks, chunksCap int) *ChunkPool {
 	r := &ChunkPool{
 		Pool: Pool[*sliceHeader]{
 			Logger: logger,
 			Name:   fmt.Sprintf("LacChunkPool(%s)", name),
 			Equal:  eq[*sliceHeader],
-			Cap:    maxChunks,
+			Cap:    chunksCap,
 		},
 		ChunkSize: chunkSz,
-		MaxChunks: maxChunks,
 	}
 
 	r.New = func() *sliceHeader {
 		c := make(chunk, 0, chunkSz)
-		r.Stats.TotalCreatedChunks.Add(1)
+		r.Stats.TotalCreated.Add(1)
 		return (*sliceHeader)(unsafe.Pointer(&c))
 	}
 
@@ -76,8 +73,8 @@ type AllocatorPool struct {
 	}
 }
 
-func NewAllocatorPool(name string, logger Logger, poolCap, chunkSz, defaultChunks, maxChunks int) *AllocatorPool {
-	chunkPool := newChunkPool(name, logger, chunkSz, defaultChunks, maxChunks)
+func NewAllocatorPool(name string, logger Logger, lacCap, chunkSz, defaultChunks, chunksCap int) *AllocatorPool {
+	chunkPool := newChunkPool(name, logger, chunkSz, defaultChunks, chunksCap)
 
 	r := &AllocatorPool{
 		Name:      name,
@@ -85,9 +82,9 @@ func NewAllocatorPool(name string, logger Logger, poolCap, chunkSz, defaultChunk
 		chunkPool: chunkPool,
 		Pool: Pool[*Allocator]{
 			Name:   fmt.Sprintf("LacPool(%s)", name),
-			Cap:    poolCap,
+			Cap:    lacCap,
 			Equal:  eq[*Allocator],
-			MaxNew: poolCap * 100,
+			MaxNew: lacCap * 100,
 		},
 	}
 	r.Pool.New = func() *Allocator { return newLac(r) }

@@ -42,7 +42,7 @@ func (p *AllocatorPool) DumpStats(reset bool) string {
 [lac]total_new:%v,pool:%v`,
 		p.Name,
 		p.Stats.SingleThreadAlloc.Load(), p.Stats.MultiThreadAlloc.Load(), allocBytes, utilization,
-		p.chunkPool.Stats.TotalCreatedChunks.Load(), chunksUsed, p.Stats.ChunksMiss.Load(), len(p.chunkPool.pool),
+		p.chunkPool.Stats.TotalCreated.Load(), chunksUsed, p.Stats.ChunksMiss.Load(), len(p.chunkPool.pool),
 		p.Stats.TotalCreatedAc.Load(), len(p.pool),
 	)
 	s = strings.ReplaceAll(s, "\n", "")
@@ -150,7 +150,7 @@ func (ac *Allocator) debugCheck(invalidatePointers bool) {
 			continue
 		}
 		if err := ac.checkRecursively(reflect.ValueOf(ptr), ctx); err != nil {
-			dumpUnsupportedTypes(ctx)
+			dumpUnsupportedTypes(ac.acPool.Logger, ctx)
 			panic(err)
 		}
 	}
@@ -306,12 +306,16 @@ var unsupportedTypes = struct {
 	m map[string]struct{}
 }{m: map[string]struct{}{}}
 
-func dumpUnsupportedTypes(ctx *checkCtx) {
+func dumpUnsupportedTypes(l Logger, ctx *checkCtx) {
 	unsupportedTypes.Lock()
 	for k := range ctx.unsupportedTypes {
 		if _, ok := unsupportedTypes.m[k]; !ok {
 			unsupportedTypes.m[k] = struct{}{}
-			fmt.Printf(k)
+			if l == nil {
+				fmt.Printf(k)
+			} else {
+				l.Errorf(k)
+			}
 		}
 	}
 	unsupportedTypes.Unlock()
