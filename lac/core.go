@@ -101,7 +101,13 @@ type Allocator struct {
 	chunks     []*sliceHeader
 	chunksLock spinLock
 	curChunk   unsafe.Pointer //*sliceHeader
-	acPool     *AllocatorPool
+
+	// Keep a reference back to the pool.
+	// This has two pros:
+	// 1. user can directly release a Allocator without specifying the pool.
+	// 2. keep the pool alive when global reference of the pool is replaced with a new one(e.g. for tweaking).
+	// this old reference keeps it reachable for the GC, prevent user from dangled pointer issue.
+	acPool *AllocatorPool
 
 	// NOTE:
 	// To keep these externals alive, slices must be alloc from raw allocator to make them

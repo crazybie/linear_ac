@@ -228,6 +228,15 @@ func (ac *Allocator) NewString(v string) string {
 // So make sure to mark objects from native heap as external pointers by using this function.
 // External pointers will be checked in debug mode.
 // Can attach Lac objects as well without any side effects.
+//
+// NOTE: you must attach the external ptr **before** assigning it to the lac-allocated object,
+// this is to ensure the external ptr is always reachable for the GC. usage:
+// ```go
+//
+//	obj := lac.New[ObjType](ac)
+//	obj.Field = lac.Attach(ac, externalPtr)
+//
+// ```
 func Attach[T any](ac *Allocator, ptr T) T {
 	if ac == nil || ac.disabled {
 		return ptr

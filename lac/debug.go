@@ -38,11 +38,11 @@ func (p *AllocatorPool) DumpStats(reset bool) string {
 	s := fmt.Sprintf(`
 [stats]name:%s,
 [alloc]st:%v,mt:%v,bytes:%v,utilization:%.2f,
-[chunks]total_new:%v,used:%v,miss:%v,pool:%v,
+[chunks]sz:%v,total_new:%v,used:%v,miss:%v,pool:%v,
 [lac]total_new:%v,pool:%v`,
 		p.Name,
 		p.Stats.SingleThreadAlloc.Load(), p.Stats.MultiThreadAlloc.Load(), allocBytes, utilization,
-		p.chunkPool.Stats.TotalCreated.Load(), chunksUsed, p.Stats.ChunksMiss.Load(), len(p.chunkPool.pool),
+		p.chunkPool.ChunkSize, p.chunkPool.Stats.TotalCreated.Load(), chunksUsed, p.Stats.ChunksMiss.Load(), len(p.chunkPool.pool),
 		p.Stats.TotalCreatedAc.Load(), len(p.pool),
 	)
 	s = strings.ReplaceAll(s, "\n", "")
