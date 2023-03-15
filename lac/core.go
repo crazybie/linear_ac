@@ -145,7 +145,12 @@ func newLac(acPool *AllocatorPool) *Allocator {
 // alloc auto select single-thread or multi-thread algo.
 // multi-thread version uses lock-free algorithm to reduce locking.
 func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
-	needAligned := (need + ptrSize + 1) & ^(ptrSize - 1)
+	needAligned := need
+	if need%ptrSize != 0 {
+		// round up
+		needAligned = (need + ptrSize + 1) & ^(ptrSize - 1)
+	}
+
 	chunkPool := ac.acPool.chunkPool
 	stats := &ac.acPool.Stats
 	var header, new_ *sliceHeader

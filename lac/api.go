@@ -20,6 +20,8 @@ var (
 	// our memory is much cheaper than systems,
 	// so we can be more aggressive than `append`.
 	SliceExtendRatio = 2.5
+
+	BugfixClearPointerSlice = true
 )
 
 func (p *AllocatorPool) Get() *Allocator {
@@ -116,10 +118,16 @@ func New[T any](ac *Allocator) (r *T) {
 //	obj.Field2 = Value2
 func NewFrom[T any](ac *Allocator, src *T) *T {
 	if ac == nil || ac.disabled {
+		// NOTE:
+		// we should not use `noescape` to avoid heap alloc the src here,
+		// because it will cause all sub fields of src be stack allocated,
+		// and the memmove only copy the top level fields,
+		// therefor cause all sub pointer fields become dangled.
 		return src
 	}
 
 	sz := unsafe.Sizeof(*src)
+	// safe to avoid zeroing the memory because no wb can be triggered here.
 	ret := (*T)(ac.alloc(int(sz), false))
 	memmoveNoHeapPointers(unsafe.Pointer(ret), unsafe.Pointer(src), sz)
 
@@ -145,7 +153,12 @@ func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
 
 	slice := (*sliceHeader)(unsafe.Pointer(&r))
 	var t T
-	slice.Data = ac.alloc(cap*int(unsafe.Sizeof(t)), false)
+	// FIX: rubbish in the slice may cause panic in the write barrier.
+	zero := reflect.TypeOf(t).Kind() == reflect.Pointer
+	if !BugfixClearPointerSlice {
+		zero = false
+	}
+	slice.Data = ac.alloc(cap*int(unsafe.Sizeof(t)), zero)
 	slice.Len = int64(len)
 	slice.Cap = int64(cap)
 	return r
@@ -180,8 +193,23 @@ func Append[T any](ac *Allocator, s []T, elems ...T) []T {
 		if h.Cap == 0 {
 			h.Cap = 16
 		}
-		h.Data = ac.alloc(int(h.Cap)*elemSz, false)
+
+		sz := int(h.Cap) * elemSz
+		h.Data = ac.alloc(sz, false)
 		memmoveNoHeapPointers(h.Data, pre.Data, uintptr(int(pre.Len)*elemSz))
+
+		// clear the reset part
+
+		// FIX: rubbish in the slice may cause panic in the write barrier.
+		var t T
+		zero := reflect.TypeOf(t).Kind() == reflect.Pointer
+		if !BugfixClearPointerSlice {
+			zero = false
+		}
+		if zero {
+			used := elemSz * int(pre.Len)
+			memclrNoHeapPointers(unsafe.Add(h.Data, used), uintptr(sz-used))
+		}
 	}
 
 	// append

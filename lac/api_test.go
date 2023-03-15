@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 type EnumA int32
@@ -82,7 +83,7 @@ func Test_Alignment(t *testing.T) {
 	ac := acPool.Get()
 	defer ac.Release()
 
-	for i := 0; i < 1024; i++ {
+	for i := 1; i < 1024; i++ {
 		p := ac.alloc(i, false)
 		if (uintptr(p) & uintptr(ptrSize-1)) != 0 {
 			t.Fail()
@@ -403,6 +404,57 @@ func Test_SliceWrongCap(t *testing.T) {
 	ac := acPool.Get()
 	defer ac.Release()
 	NewSlice[byte](ac, 10, 0)
+}
+
+//go:linkname findObject runtime.findObject
+func findObject(p, refBase, refOff uintptr) (base uintptr, s uintptr, objIndex uintptr)
+
+func TestSliceWbPanic(t *testing.T) {
+	BugfixClearPointerSlice = false
+
+	ac := acPool.Get()
+	defer ac.Release()
+
+	ac.Int(0) // ensure one chunk
+
+	type mSpanStateBox struct {
+		s uint8
+	}
+
+	type mspan struct {
+		next      *mspan
+		prev      *mspan
+		list      uintptr
+		startAddr uintptr
+		npages    uintptr
+
+		manualFreeList uintptr
+		freeindex      uintptr
+		nelems         uintptr
+		allocCache     uint64
+		allocBits      uintptr
+		gcmarkBits     uintptr
+
+		sweepgen              uint32
+		divMul                uint32
+		allocCount            uint16
+		spanclass             uint8
+		state                 mSpanStateBox
+		needzero              uint8
+		allocCountBeforeCache uint16
+		elemsize              uintptr
+		limit                 uintptr
+	}
+
+	// write a special rubbish
+	s := (*[2]uintptr)((*sliceHeader)(ac.curChunk).Data)
+	_, ms, _ := findObject(uintptr(unsafe.Pointer(new(PbItem))), 0, 0)
+	span := (*mspan)(unsafe.Pointer(ms))
+	s[1] = span.limit + 1024*8 - 8
+
+	// simulate the write barrier
+	a := NewSlice[*PbItem](ac, 1, 1)
+	findObject((uintptr)(unsafe.Pointer(a[0])), 0, 0)
 }
 
 // NOTE: run with "-race".
