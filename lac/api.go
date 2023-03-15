@@ -190,7 +190,7 @@ func Append[T any](ac *Allocator, s []T, elems ...T) []T {
 			}
 		}
 
-		if h.Cap == 0 {
+		if h.Cap < 16 {
 			h.Cap = 16
 		}
 

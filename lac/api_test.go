@@ -11,6 +11,7 @@ package lac
 
 import (
 	"fmt"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -332,6 +333,32 @@ func Test_Append(t *testing.T) {
 	}
 }
 
+func TestPointerSlice(t *testing.T) {
+	ac := acPool.Get()
+	defer ac.Release()
+
+	ptrs := NewSlice[*PbItem](ac, 5, 5)
+	for _, p := range ptrs {
+		if p != nil {
+			t.Fail()
+		}
+	}
+
+	ptrs = []*PbItem{New[PbItem](ac)}
+	ptrs = Append(ac, ptrs, New[PbItem](ac))
+	l := len(ptrs)
+	// should have empty space
+	if l == cap(ptrs) {
+		t.Fail()
+	}
+	// unused space must be zeroed
+	for _, p := range ptrs[:cap(ptrs)][l+1:] {
+		if p != nil {
+			t.Fail()
+		}
+	}
+}
+
 func Test_SliceAppendStructValue(t *testing.T) {
 	ac := acPool.Get()
 	defer ac.Release()
@@ -409,8 +436,13 @@ func Test_SliceWrongCap(t *testing.T) {
 //go:linkname findObject runtime.findObject
 func findObject(p, refBase, refOff uintptr) (base uintptr, s uintptr, objIndex uintptr)
 
+// Fix random crash:
+// runtime: pointer 0xc000073ff8 to unused region of span span.base()=0xc000072000 span.limit=0xc000073fb0 span.state=1
+// fatal error: found bad pointer in Go heap (incorrect use of unsafe or cgo?)
 func TestSliceWbPanic(t *testing.T) {
-	BugfixClearPointerSlice = false
+	if os.Getenv("SimulateCrash") != "" {
+		BugfixClearPointerSlice = false
+	}
 
 	ac := acPool.Get()
 	defer ac.Release()
