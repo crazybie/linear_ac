@@ -154,7 +154,7 @@ func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
 	slice := (*sliceHeader)(unsafe.Pointer(&r))
 	var t T
 	// FIX: rubbish in the slice may cause panic in the write barrier.
-	zero := reflect.TypeOf(t).Kind() == reflect.Pointer
+	zero := mayContainsPtr(reflect.TypeOf(t).Kind())
 	if !BugfixClearPointerSlice {
 		zero = false
 	}
@@ -202,7 +202,7 @@ func Append[T any](ac *Allocator, s []T, elems ...T) []T {
 
 		// FIX: rubbish in the slice may cause panic in the write barrier.
 		var t T
-		zero := reflect.TypeOf(t).Kind() == reflect.Pointer
+		zero := mayContainsPtr(reflect.TypeOf(t).Kind())
 		if !BugfixClearPointerSlice {
 			zero = false
 		}
