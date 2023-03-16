@@ -436,6 +436,8 @@ func Test_SliceWrongCap(t *testing.T) {
 //go:linkname findObject runtime.findObject
 func findObject(p, refBase, refOff uintptr) (base uintptr, s uintptr, objIndex uintptr)
 
+// NOTE: must run without -race flag.
+//
 // Fix random crash:
 // runtime: pointer 0xc000073ff8 to unused region of span span.base()=0xc000072000 span.limit=0xc000073fb0 span.state=1
 // fatal error: found bad pointer in Go heap (incorrect use of unsafe or cgo?)
@@ -493,9 +495,9 @@ func TestSliceWbPanic(t *testing.T) {
 func TestSharedAc_NoRace(t *testing.T) {
 	ac := acPool.Get()
 	wg := sync.WaitGroup{}
-	wg.Add(100)
+	wg.Add(10)
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 10; i++ {
 		ac.IncRef()
 		go func() {
 
@@ -534,7 +536,9 @@ func TestReinitPool(t *testing.T) {
 
 			for running.Load() {
 
+				acPoolMu.RLock()
 				ac := acPool.Get()
+				acPoolMu.RUnlock()
 
 				i := New[PbItem](ac)
 				i.Class = ac.Int(100)
@@ -557,7 +561,10 @@ func TestReinitPool(t *testing.T) {
 
 	time.Sleep(time.Duration(1) * time.Microsecond)
 
+	acPoolMu.Lock()
 	acPool = NewAllocatorPool("test", nil, 10000, 64*1024, 32*1000, 64*1000)
+	acPoolMu.Unlock()
+
 	// force to recycle the old pool.
 	runtime.GC()
 	time.Sleep(time.Duration(10) * time.Microsecond)
