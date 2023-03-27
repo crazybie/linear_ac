@@ -443,13 +443,8 @@ func findObject(p, refBase, refOff uintptr) (base uintptr, s uintptr, objIndex u
 // fatal error: found bad pointer in Go heap (incorrect use of unsafe or cgo?)
 func TestSliceWbPanic(t *testing.T) {
 	if os.Getenv("SimulateCrash") != "" {
-		BugfixClearPointerSlice = false
+		BugfixClearPointerInMem = false
 	}
-
-	ac := acPool.Get()
-	defer ac.Release()
-
-	ac.Int(0) // ensure one chunk
 
 	type mSpanStateBox struct {
 		s uint8
@@ -480,15 +475,22 @@ func TestSliceWbPanic(t *testing.T) {
 		limit                 uintptr
 	}
 
-	// write a special rubbish
-	s := (*[2]uintptr)((*sliceHeader)(ac.curChunk).Data)
-	_, ms, _ := findObject(uintptr(unsafe.Pointer(new(PbItem))), 0, 0)
-	span := (*mspan)(unsafe.Pointer(ms))
-	s[1] = span.limit + 1024*8 - 8
+	for j := 0; j < 1000; j++ {
+		ac := acPool.Get()
+		ac.Int(0) // ensure one chunk
 
-	// simulate the write barrier
-	a := NewSlice[*PbItem](ac, 1, 1)
-	findObject((uintptr)(unsafe.Pointer(a[0])), 0, 0)
+		// write a special rubbish
+		s := (*[2]uintptr)((*sliceHeader)(ac.curChunk).Data)
+		_, ms, _ := findObject(uintptr(unsafe.Pointer(new(PbItem))), 0, 0)
+		span := (*mspan)(unsafe.Pointer(ms))
+		s[1] = span.limit + 1024*8 - 8
+
+		// simulate the write barrier
+		a := NewSlice[uintptr](ac, 1, 1)
+		findObject((uintptr)(unsafe.Pointer(a[0])), 0, 0)
+
+		ac.Release()
+	}
 }
 
 // NOTE: run with "-race".

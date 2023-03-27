@@ -139,7 +139,6 @@ func mayContainsPtr(k reflect.Kind) bool {
 		reflect.Uint16,
 		reflect.Uint32,
 		reflect.Uint64,
-		reflect.Uintptr,
 		reflect.Float32,
 		reflect.Float64,
 		reflect.Complex64,

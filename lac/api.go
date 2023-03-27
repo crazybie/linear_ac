@@ -21,7 +21,7 @@ var (
 	// so we can be more aggressive than `append`.
 	SliceExtendRatio = 2.5
 
-	BugfixClearPointerSlice = true
+	BugfixClearPointerInMem = true
 )
 
 func (p *AllocatorPool) Get() *Allocator {
@@ -153,9 +153,9 @@ func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
 
 	slice := (*sliceHeader)(unsafe.Pointer(&r))
 	var t T
-	// FIX: rubbish in the slice may cause panic in the write barrier.
+	// FIX: invalid pointer in the allocated memory may cause panic in the write barrier.
 	zero := mayContainsPtr(reflect.TypeOf(t).Kind())
-	if !BugfixClearPointerSlice {
+	if !BugfixClearPointerInMem {
 		zero = false
 	}
 	slice.Data = ac.alloc(cap*int(unsafe.Sizeof(t)), zero)
@@ -200,10 +200,10 @@ func Append[T any](ac *Allocator, s []T, elems ...T) []T {
 
 		// clear the reset part
 
-		// FIX: rubbish in the slice may cause panic in the write barrier.
+		// FIX: invalid pointer in the allocated memory may cause panic in the write barrier.
 		var t T
 		zero := mayContainsPtr(reflect.TypeOf(t).Kind())
-		if !BugfixClearPointerSlice {
+		if !BugfixClearPointerInMem {
 			zero = false
 		}
 		if zero {
@@ -362,7 +362,10 @@ func (ac *Allocator) String(v string) (r *string) {
 		r = new(string)
 		*r = v
 	} else {
-		r = (*string)(ac.alloc(int(unsafe.Sizeof(v)), false))
+		// FIX: invalid pointer in the allocated memory may cause panic in the write barrier.
+		const zero = true
+
+		r = (*string)(ac.alloc(int(unsafe.Sizeof(v)), zero))
 		*r = ac.NewString(v)
 	}
 	return
