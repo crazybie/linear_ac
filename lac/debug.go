@@ -25,12 +25,18 @@ import (
 var diagnosisChunkPool = sync.Pool{}
 
 func (p *AllocatorPool) EnableDebugMode(v bool) {
+	if p == nil {
+		return
+	}
 	p.debugMode = v
 	p.Pool.CheckDuplication = v
 	p.chunkPool.CheckDuplication = v
 }
 
 func (p *AllocatorPool) DumpStats(reset bool) string {
+	if p == nil {
+		return "<disabled>"
+	}
 	chunksUsed := p.Stats.ChunksUsed.Load()
 	allocBytes := p.Stats.AllocBytes.Load()
 	utilization := float32(allocBytes) / float32(int64(p.chunkPool.ChunkSize)*chunksUsed) * 100
@@ -198,7 +204,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, ctx *checkCtx) error {
 
 			case reflect.Ptr:
 				if err := ac.checkRecursively(f, ctx); err != nil {
-					return fmt.Errorf("%v: %v", fieldName(i), err)
+					return fmt.Errorf("%v: %w", fieldName(i), err)
 				}
 				if ctx.invalidatePointers {
 					*(*uintptr)(unsafe.Pointer(f.UnsafeAddr())) = nonNilPanickyAddr
@@ -221,7 +227,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, ctx *checkCtx) error {
 					if pt == pointerTypeLacInternal {
 						for j := 0; j < f.Len(); j++ {
 							if err := ac.checkRecursively(f.Index(j), ctx); err != nil {
-								return fmt.Errorf("%v: %v", fieldName(i), err)
+								return fmt.Errorf("%v: %w", fieldName(i), err)
 							}
 						}
 					}
@@ -235,7 +241,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, ctx *checkCtx) error {
 			case reflect.Array:
 				for j := 0; j < f.Len(); j++ {
 					if err := ac.checkRecursively(f.Index(j), ctx); err != nil {
-						return fmt.Errorf("%v: %v", fieldName(i), err)
+						return fmt.Errorf("%v: %w", fieldName(i), err)
 					}
 				}
 
@@ -253,7 +259,7 @@ func (ac *Allocator) checkRecursively(val reflect.Value, ctx *checkCtx) error {
 				}
 				for iter := f.MapRange(); iter.Next(); {
 					if err := ac.checkRecursively(iter.Value(), ctx); err != nil {
-						return fmt.Errorf("%v: %v", fieldName(i), err)
+						return fmt.Errorf("%v: %w", fieldName(i), err)
 					}
 				}
 
@@ -312,9 +318,9 @@ func dumpUnsupportedTypes(l Logger, ctx *checkCtx) {
 		if _, ok := unsupportedTypes.m[k]; !ok {
 			unsupportedTypes.m[k] = struct{}{}
 			if l == nil {
-				fmt.Printf(k)
+				fmt.Printf("%s", k)
 			} else {
-				l.Errorf(k)
+				l.Errorf("%s", k)
 			}
 		}
 	}

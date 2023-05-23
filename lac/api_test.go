@@ -294,20 +294,57 @@ func Test_AttachExternal(b *testing.T) {
 	ac := acPool.Get()
 	defer ac.Release()
 
+	const sz = 100
+
 	type D struct {
-		d [10]*int
+		d  [sz]*int
+		s  [sz]string
+		ar [sz][]int
 	}
+
+	fail := false
+
 	d := New[D](ac)
 	for i := 0; i < len(d.d); i++ {
-		d.d[i] = Attach(ac, new(int))
-		//d.d[i] = new(int)
+		// pointer
+		if fail {
+			d.d[i] = new(int)
+		} else {
+			d.d[i] = Attach(ac, new(int))
+		}
 		*d.d[i] = i
+
+		// string
+		if fail {
+			d.s[i] = fmt.Sprintf("%d", i)
+		} else {
+			d.s[i] = Attach(ac, fmt.Sprintf("%d", i))
+		}
+
+		// slice
+		if fail {
+			d.ar[i] = []int{0, 1, 2, 3}
+		} else {
+			d.ar[i] = Attach(ac, []int{0, 1, 2, 3})
+		}
+
 		runtime.GC()
 	}
 
 	for i := 0; i < len(d.d); i++ {
 		if *d.d[i] != i {
-			b.Errorf("should not be gced.")
+			b.Errorf("int should not be gced.")
+		}
+		if d.s[i] != fmt.Sprintf("%d", i) {
+			b.Errorf("string should not be gced.")
+		}
+		if len(d.ar[i]) != 4 {
+			b.Errorf("slice should not be gced.")
+		}
+		for idx, v := range d.ar[i] {
+			if v != idx {
+				b.Errorf("slice gced")
+			}
 		}
 	}
 }
@@ -493,6 +530,27 @@ func TestSliceWbPanic(t *testing.T) {
 	}
 }
 
+func TestSameSpan(t *testing.T) {
+	ac := acPool.Get()
+	defer ac.Release()
+
+	o := New[PbItem](ac)
+	obj, span, idx := findObject(uintptr(unsafe.Pointer(o)), 0, 0)
+	for i := 0; i < 100; i++ {
+		p := New[PbItem](ac)
+		obj2, span2, idx2 := findObject(uintptr(unsafe.Pointer(p)), 0, 0)
+		if obj2 != obj {
+			t.Errorf("obj")
+		}
+		if span != span2 {
+			t.Errorf("span")
+		}
+		if idx != idx2 {
+			t.Errorf("idx")
+		}
+	}
+}
+
 // NOTE: run with "-race".
 func TestSharedAc_NoRace(t *testing.T) {
 	ac := acPool.Get()
@@ -573,4 +631,75 @@ func TestReinitPool(t *testing.T) {
 
 	running.Store(false)
 	wg.Wait()
+}
+
+//go:linkname atomicwb runtime.atomicwb
+func atomicwb(ptr *unsafe.Pointer, new unsafe.Pointer)
+
+func TestNoAlloc(t *testing.T) {
+	ac := acPool.Get()
+	defer ac.DecRef()
+
+	ac.Int(1)
+
+	noMalloc(func() {
+		_ = New[PbItem](ac)
+	})
+
+	noMalloc(func() {
+		_ = ac.Int(1)
+	})
+
+	noMalloc(func() {
+		_ = ac.String("1")
+	})
+
+	noMalloc(func() {
+		a := NewSlice[*PbItem](ac, 1, 1)
+		a = Append(ac, a, New[PbItem](ac))
+		a = Append(ac, a, New[PbItem](ac))
+		runtime.KeepAlive(a)
+	})
+}
+
+func TestFreeMarkedObj(t *testing.T) {
+	if os.Getenv("SimulateCrash") != "" {
+		BugfixCorruptOtherMem = false
+		defer func() {
+			BugfixCorruptOtherMem = true
+		}()
+	}
+
+	ac := acPool.Get()
+	defer ac.Release()
+
+	for n := 0; n < 1000; n++ {
+		ac.valid = true
+
+		// 1. exhaust the chunk
+		//--------------------
+		_ = NewSlice[byte](ac, 0, acPool.chunkPool.ChunkSize)
+
+		// 2. alloc a zero size slice
+		//--------------------
+		items := NewSlice[*PbItem](ac, 0, 0)
+		heapObj := new(PbData)
+
+		// 3. force a write barrier flush
+		//--------------------
+		wbBufSize := 256
+		for i := 0; i < wbBufSize; i++ {
+			dst := &(*sliceHeader)(unsafe.Pointer(&heapObj.Items)).Data
+			src := (*sliceHeader)(unsafe.Pointer(&items)).Data
+			atomicwb(dst, src)
+			heapObj.Items = items
+		}
+
+		// 4. force a gc sweep
+		//--------------------
+		runtime.GC()
+
+		runtime.KeepAlive(heapObj)
+		ac.reset()
+	}
 }

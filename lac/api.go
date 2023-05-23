@@ -22,6 +22,9 @@ var (
 	SliceExtendRatio = 2.5
 
 	BugfixClearPointerInMem = true
+	BugfixCorruptOtherMem   = true
+
+	ZeroMemOnFree = false
 )
 
 func (p *AllocatorPool) Get() *Allocator {
@@ -151,10 +154,16 @@ func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
 		panic("NewSlice: cap out of range")
 	}
 
+	if BugfixCorruptOtherMem {
+		if cap == 0 {
+			return nil
+		}
+	}
+
 	slice := (*sliceHeader)(unsafe.Pointer(&r))
-	var t T
+	var t *T
 	// FIX: invalid pointer in the allocated memory may cause panic in the write barrier.
-	zero := mayContainsPtr(reflect.TypeOf(t).Kind())
+	zero := mayContainsPtr(reflect.TypeOf(t).Elem().Kind())
 	if !BugfixClearPointerInMem {
 		zero = false
 	}
@@ -201,8 +210,8 @@ func Append[T any](ac *Allocator, s []T, elems ...T) []T {
 		// clear the reset part
 
 		// FIX: invalid pointer in the allocated memory may cause panic in the write barrier.
-		var t T
-		zero := mayContainsPtr(reflect.TypeOf(t).Kind())
+		var t *T
+		zero := mayContainsPtr(reflect.TypeOf(t).Elem().Kind())
 		if !BugfixClearPointerInMem {
 			zero = false
 		}
@@ -244,9 +253,14 @@ func (ac *Allocator) NewString(v string) string {
 	if ac == nil || ac.disabled {
 		return v
 	}
+	if len(v) == 0 {
+		return ""
+	}
 	h := (*stringHeader)(unsafe.Pointer(&v))
 	ptr := ac.alloc(h.Len, false)
-	memmoveNoHeapPointers(ptr, h.Data, uintptr(h.Len))
+	if ptr != nil {
+		memmoveNoHeapPointers(ptr, h.Data, uintptr(h.Len))
+	}
 	h.Data = ptr
 	return v
 }

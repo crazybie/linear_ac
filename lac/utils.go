@@ -148,6 +148,16 @@ func mayContainsPtr(k reflect.Kind) bool {
 	return true
 }
 
+func noMalloc(f func()) {
+	var s, e runtime.MemStats
+	runtime.ReadMemStats(&s)
+	f()
+	runtime.ReadMemStats(&e)
+	if n := e.Mallocs - s.Mallocs; n > 0 {
+		panic(fmt.Errorf("has %v malloc, bytes: %v", n, e.Alloc-s.Alloc))
+	}
+}
+
 //============================================================================
 // Spin lock
 //============================================================================

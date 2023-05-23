@@ -145,6 +145,12 @@ func newLac(acPool *AllocatorPool) *Allocator {
 // alloc auto select single-thread or multi-thread algo.
 // multi-thread version uses lock-free algorithm to reduce locking.
 func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
+	if BugfixCorruptOtherMem {
+		if need == 0 {
+			return nil
+		}
+	}
+
 	needAligned := need
 	if need%ptrSize != 0 {
 		// round up
@@ -250,6 +256,9 @@ func (ac *Allocator) reset() {
 			if ac.acPool.debugMode {
 				diagnosisChunkPool.Put(ck)
 			} else {
+				if ZeroMemOnFree {
+					memclrNoHeapPointers(ck.Data, uintptr(ck.Cap))
+				}
 				ac.acPool.chunkPool.Put(ck)
 			}
 		} else {
