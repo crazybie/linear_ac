@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"math"
 	"reflect"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"unsafe"
@@ -37,25 +36,22 @@ func (p *AllocatorPool) DumpStats(reset bool) string {
 	if p == nil {
 		return "<disabled>"
 	}
-	chunksUsed := p.Stats.ChunksUsed.Load()
-	allocBytes := p.Stats.AllocBytes.Load()
-	utilization := float32(allocBytes) / float32(int64(p.chunkPool.ChunkSize)*chunksUsed) * 100
+
+	utilization := float64(p.Stats.AllocBytes.Load()) / float64(p.Stats.ChunksUsed.Load()*int64(p.chunkPool.ChunkSize))
 
 	s := fmt.Sprintf(`
-[stats]name:%s,
-[alloc]st:%v,mt:%v,bytes:%v,utilization:%.2f,
-[chunks]sz:%v,total_new:%v,used:%v,miss:%v,pool:%v,
-[lac]total_new:%v,pool:%v`,
-		p.Name,
-		p.Stats.SingleThreadAlloc.Load(), p.Stats.MultiThreadAlloc.Load(), allocBytes, utilization,
-		p.chunkPool.ChunkSize, p.chunkPool.Stats.TotalCreated.Load(), chunksUsed, p.Stats.ChunksMiss.Load(), len(p.chunkPool.pool),
-		p.Stats.TotalCreatedAc.Load(), len(p.pool),
+[stats]name:%s, chunk_sz:%v,
+[total]new_chunks:%v,new_lacs:%v,
+[chunks]utilization:%.2f, used:%v, miss:%v, pooled:%v,
+[lac]pooled:%v`,
+		p.Name, p.chunkPool.ChunkSize,
+		p.chunkPool.Stats.TotalCreated.Load(), p.Stats.TotalCreatedAc.Load(),
+		utilization, p.Stats.ChunksUsed.Load(), p.Stats.ChunksMiss.Load(), len(p.chunkPool.pool),
+		len(p.pool),
 	)
 	s = strings.ReplaceAll(s, "\n", "")
 
 	if reset {
-		p.Stats.SingleThreadAlloc.Store(0)
-		p.Stats.MultiThreadAlloc.Store(0)
 		p.Stats.AllocBytes.Store(0)
 		p.Stats.ChunksUsed.Store(0)
 		p.Stats.ChunksMiss.Store(0)
@@ -74,16 +70,6 @@ func (p *AllocatorPool) DebugCheck() {
 		// chunkPool.DebugCheck()
 
 		fmt.Printf("Lac: debug check done.\n")
-	}
-}
-
-func (ac *Allocator) checkValidity() {
-	if !ac.valid {
-		stack := "<stack disabled in release mode>"
-		if ac.acPool.debugMode {
-			stack = string(debug.Stack())
-		}
-		errorf(ac.acPool, "[%v]: lac already be recycled: %v", ac.acPool.Name, stack)
 	}
 }
 

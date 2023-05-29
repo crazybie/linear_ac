@@ -307,14 +307,3 @@ func Test_ShouldIgnoreFieldsOfMarkedExternal(t *testing.T) {
 	s.sub = Attach(ac, &D{i: new(int)})
 	ac.Release()
 }
-
-func TestValidityCheck(t *testing.T) {
-	ac := acPool.Get()
-	ac.Release()
-	defer func() {
-		if err := recover(); err == nil {
-			t.Errorf("should panic")
-		}
-	}()
-	_ = New[int](ac)
-}

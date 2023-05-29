@@ -64,12 +64,10 @@ type AllocatorPool struct {
 	Name      string
 
 	Stats struct {
-		TotalCreatedAc    atomic.Int64
-		SingleThreadAlloc atomic.Int64
-		MultiThreadAlloc  atomic.Int64
-		AllocBytes        atomic.Int64
-		ChunksUsed        atomic.Int64
-		ChunksMiss        atomic.Int64
+		TotalCreatedAc atomic.Int64
+		ChunksUsed     atomic.Int64
+		ChunksMiss     atomic.Int64
+		AllocBytes     atomic.Int64
 	}
 }
 
@@ -95,10 +93,9 @@ func NewAllocatorPool(name string, logger Logger, lacCap, chunkSz, defaultChunks
 // Allocator
 
 type Allocator struct {
-	disabled   bool
-	valid      bool
 	refCnt     atomic.Int32
 	chunks     []*sliceHeader
+	chunkPool  *ChunkPool
 	chunksLock spinLock
 	curChunk   unsafe.Pointer //*sliceHeader
 
@@ -123,9 +120,9 @@ type Allocator struct {
 
 func newLac(acPool *AllocatorPool) *Allocator {
 	ac := &Allocator{
-		disabled: DisableAllLac,
-		chunks:   make([]*sliceHeader, 0, 4),
-		acPool:   acPool,
+		chunks:    make([]*sliceHeader, 0, 4),
+		acPool:    acPool,
+		chunkPool: acPool.chunkPool,
 
 		externalPtr:    newWeakUniqQueue(32, eq[unsafe.Pointer]),
 		externalSlice:  newWeakUniqQueue(32, eq[unsafe.Pointer]),
@@ -145,10 +142,8 @@ func newLac(acPool *AllocatorPool) *Allocator {
 // alloc auto select single-thread or multi-thread algo.
 // multi-thread version uses lock-free algorithm to reduce locking.
 func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
-	if BugfixCorruptOtherMem {
-		if need == 0 {
-			return nil
-		}
+	if need == 0 && BugfixCorruptOtherMem {
+		return nil
 	}
 
 	needAligned := need
@@ -157,16 +152,12 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 		needAligned = (need + ptrSize + 1) & ^(ptrSize - 1)
 	}
 
-	chunkPool := ac.acPool.chunkPool
-	stats := &ac.acPool.Stats
+	chunkPool := ac.chunkPool
 	var header, new_ *sliceHeader
 	var len_, cap_ int64
 
-	ac.checkValidity()
-
 	// single-threaded path
 	if ac.refCnt.Load() == 1 {
-		stats.SingleThreadAlloc.Add(1)
 
 		for {
 			if ac.curChunk != nil {
@@ -190,14 +181,12 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 				if zero {
 					memclrNoHeapPointers(ptr, uintptr(needAligned))
 				}
-				stats.AllocBytes.Add(int64(needAligned))
 				return ptr
 			}
 		}
 	}
 
 	// multi-threaded path
-	stats.MultiThreadAlloc.Add(1)
 	for {
 		cur := atomic.LoadPointer(&ac.curChunk)
 		if cur != nil {
@@ -226,7 +215,6 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 				if zero {
 					memclrNoHeapPointers(ptr, uintptr(needAligned))
 				}
-				stats.AllocBytes.Add(int64(needAligned))
 				return ptr
 			}
 		}
@@ -234,10 +222,6 @@ func (ac *Allocator) alloc(need int, zero bool) unsafe.Pointer {
 }
 
 func (ac *Allocator) reset() {
-	if ac.disabled {
-		return
-	}
-
 	if ac.acPool.debugMode {
 		ac.debugCheck(true)
 		ac.dbgScanObjs.Clear()
@@ -246,6 +230,7 @@ func (ac *Allocator) reset() {
 	stats := &ac.acPool.Stats
 
 	for _, ck := range ac.chunks {
+		stats.AllocBytes.Add(ck.Len)
 		ck.Len = 0
 
 		// only reuse the normal chunks,
@@ -282,15 +267,10 @@ func (ac *Allocator) reset() {
 	ac.externalString.Clear()
 	ac.externalFunc.Clear()
 
-	ac.disabled = DisableAllLac
-	ac.valid = false
 	ac.refCnt.Store(1)
 }
 
 func (ac *Allocator) keepAlive(ptr interface{}) {
-	if ac.disabled {
-		return
-	}
 
 	d := data(ptr)
 	if d == nil {

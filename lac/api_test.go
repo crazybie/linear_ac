@@ -674,7 +674,6 @@ func TestFreeMarkedObj(t *testing.T) {
 	defer ac.Release()
 
 	for n := 0; n < 1000; n++ {
-		ac.valid = true
 
 		// 1. exhaust the chunk
 		//--------------------

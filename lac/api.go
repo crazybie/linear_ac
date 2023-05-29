@@ -32,12 +32,11 @@ func (p *AllocatorPool) Get() *Allocator {
 		return nil
 	}
 	ac := p.Pool.Get()
-	ac.valid = true
 	return ac
 }
 
 func (ac *Allocator) Release() {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		return
 	}
 	ac.reset()
@@ -64,10 +63,9 @@ func (ac *Allocator) Release() {
 // This appointment also ensure the single-threaded version will never run in parallel with
 // the multi-threaded version.
 func (ac *Allocator) IncRef() {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		return
 	}
-	ac.checkValidity()
 	ac.refCnt.Add(1)
 }
 
@@ -75,10 +73,9 @@ func (ac *Allocator) IncRef() {
 // If one DecRef call is missed causes the Lac not go back to Pool, it will be recycled by GC later.
 // If more DecRef calls are called cause the ref cnt reduced to negative, panic in debug mode.
 func (ac *Allocator) DecRef() {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		return
 	}
-	ac.checkValidity()
 	if n := ac.refCnt.Add(-1); n <= 0 {
 		if n < 0 {
 			errorf(ac.acPool, "potential bug: ref cnt is negative: %v", n)
@@ -92,7 +89,7 @@ func (ac *Allocator) DecRef() {
 //============================================================================
 
 func New[T any](ac *Allocator) (r *T) {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		return new(T)
 	}
 
@@ -120,7 +117,7 @@ func New[T any](ac *Allocator) (r *T) {
 //	obj.Field1 = Value1
 //	obj.Field2 = Value2
 func NewFrom[T any](ac *Allocator, src *T) *T {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		// NOTE:
 		// we should not use `noescape` to avoid heap alloc the src here,
 		// because it will cause all sub fields of src be stack allocated,
@@ -145,7 +142,7 @@ func NewFrom[T any](ac *Allocator, src *T) *T {
 // NewSlice does not zero the slice automatically, this is OK with most cases and can improve the performance.
 // zero it yourself for your need.
 func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		return make([]T, len, cap)
 	}
 
@@ -174,7 +171,7 @@ func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
 }
 
 func Append[T any](ac *Allocator, s []T, elems ...T) []T {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		return append(s, elems...)
 	}
 
@@ -231,7 +228,7 @@ func Append[T any](ac *Allocator, s []T, elems ...T) []T {
 
 func NewMap[K comparable, V any](ac *Allocator, cap int) map[K]V {
 	m := make(map[K]V, cap)
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		return m
 	}
 	ac.keepAlive(m)
@@ -239,7 +236,7 @@ func NewMap[K comparable, V any](ac *Allocator, cap int) map[K]V {
 }
 
 func NewEnum[T any](ac *Allocator, e T) *T {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		r := new(T)
 		*r = e
 		return r
@@ -250,7 +247,7 @@ func NewEnum[T any](ac *Allocator, e T) *T {
 }
 
 func (ac *Allocator) NewString(v string) string {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		return v
 	}
 	if len(v) == 0 {
@@ -280,7 +277,7 @@ func (ac *Allocator) NewString(v string) string {
 //
 // ```
 func Attach[T any](ac *Allocator, ptr T) T {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		return ptr
 	}
 	ac.keepAlive(ptr)
@@ -292,7 +289,7 @@ func Attach[T any](ac *Allocator, ptr T) T {
 //============================================================================
 
 func (ac *Allocator) Bool(v bool) (r *bool) {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		r = new(bool)
 	} else {
 		r = (*bool)(ac.alloc(int(unsafe.Sizeof(v)), false))
@@ -302,7 +299,7 @@ func (ac *Allocator) Bool(v bool) (r *bool) {
 }
 
 func (ac *Allocator) Int(v int) (r *int) {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		r = new(int)
 	} else {
 		r = (*int)(ac.alloc(int(unsafe.Sizeof(v)), false))
@@ -312,7 +309,7 @@ func (ac *Allocator) Int(v int) (r *int) {
 }
 
 func (ac *Allocator) Int32(v int32) (r *int32) {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		r = new(int32)
 	} else {
 		r = (*int32)(ac.alloc(int(unsafe.Sizeof(v)), false))
@@ -322,7 +319,7 @@ func (ac *Allocator) Int32(v int32) (r *int32) {
 }
 
 func (ac *Allocator) Uint32(v uint32) (r *uint32) {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		r = new(uint32)
 	} else {
 		r = (*uint32)(ac.alloc(int(unsafe.Sizeof(v)), false))
@@ -332,7 +329,7 @@ func (ac *Allocator) Uint32(v uint32) (r *uint32) {
 }
 
 func (ac *Allocator) Int64(v int64) (r *int64) {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		r = new(int64)
 	} else {
 		r = (*int64)(ac.alloc(int(unsafe.Sizeof(v)), false))
@@ -342,7 +339,7 @@ func (ac *Allocator) Int64(v int64) (r *int64) {
 }
 
 func (ac *Allocator) Uint64(v uint64) (r *uint64) {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		r = new(uint64)
 	} else {
 		r = (*uint64)(ac.alloc(int(unsafe.Sizeof(v)), false))
@@ -352,7 +349,7 @@ func (ac *Allocator) Uint64(v uint64) (r *uint64) {
 }
 
 func (ac *Allocator) Float32(v float32) (r *float32) {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		r = new(float32)
 	} else {
 		r = (*float32)(ac.alloc(int(unsafe.Sizeof(v)), false))
@@ -362,7 +359,7 @@ func (ac *Allocator) Float32(v float32) (r *float32) {
 }
 
 func (ac *Allocator) Float64(v float64) (r *float64) {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		r = new(float64)
 	} else {
 		r = (*float64)(ac.alloc(int(unsafe.Sizeof(v)), false))
@@ -372,7 +369,7 @@ func (ac *Allocator) Float64(v float64) (r *float64) {
 }
 
 func (ac *Allocator) String(v string) (r *string) {
-	if ac == nil || ac.disabled {
+	if ac == nil {
 		r = new(string)
 		*r = v
 	} else {
