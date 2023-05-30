@@ -8,7 +8,7 @@ NOTE: need go1.18+.
 
 ## Potential Use cases
 1. A large amount of memory never needs to be released. (global configs, read-only assets like navmesh)
-2. Massive temporary objects with deterministic lifetime. (protobuf objects send to network)
+2. Massive temporary objects with deterministic lifetime. (protobuf objects sent to network)
 
 ## Highlights
 Linear allocator:
