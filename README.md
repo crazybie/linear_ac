@@ -4,7 +4,7 @@
 ## Goal
 Speed up the memory allocation and improve the GC performance, especially for dynamic-memory-heavy applications.
 
-NOTE: current version need go1.18+.
+NOTE: need go1.18+.
 
 ## Potential Use cases
 1. A large amount of memory never needs to be released. (global configs, read-only assets like navmesh)
