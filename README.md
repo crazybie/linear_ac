@@ -35,9 +35,9 @@ Linear allocator:
 2. Support concurrency.
 3. Slice append can utilize Lac as well.
 4. Support debugging mode.
-5. Provide protobuf2 like APIs.
+5. Provide protobuf2 style APIs.
 6. Completely pointer free (no pointer bitmap initializing, no GC marking, etc).
-7. Do not zero slices by default.
+7. donot zero memory as much as possible.
 
 ## Usage
 
