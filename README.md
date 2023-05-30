@@ -57,7 +57,7 @@ type PbData struct {
 }
 
 func main() {	
-	ac := lac.Get()
+	ac := acPool.Get()
 	defer ac.Release()
 	
 	d := lac.New[PbData](ac)
@@ -89,13 +89,15 @@ goos: linux
 goarch: amd64
 pkg: oops/lib/linear_ac/lac
 cpu: Intel(R) Core(TM) i5-8500 CPU @ 3.00GHz
-BenchmarkNew-6                   2655375               474.3 ns/op           185 B/op          0 allocs/op
-BenchmarkNewFrom-6               3093921               476.7 ns/op           147 B/op          0 allocs/op
-Benchmark_RawMalloc-6           10047429               106.1 ns/op            88 B/op          5 allocs/op
-Benchmark_LacMalloc-6           14244061               115.0 ns/op           128 B/op          0 allocs/op
-Benchmark_RawMallocLarge2-6        27825             40892 ns/op           27496 B/op       1656 allocs/op
-Benchmark_LacMallocLarge2-6        51686             24068 ns/op           39583 B/op          0 allocs/op
-PASS
+BenchmarkNew-6                             65127            118814 ns/op             167 B/op          0 allocs/op
+BenchmarkNewFrom-6                         64368            117673 ns/op             217 B/op          1 allocs/op
+Benchmark_RawMalloc-6                    9584208             124.6 ns/op              88 B/op          5 allocs/op
+Benchmark_LacMalloc-6                   17156577             68.20 ns/op               0 B/op          0 allocs/op
+Benchmark_LacMallocMt-6                 17331070             69.52 ns/op               0 B/op          0 allocs/op
+Benchmark_RawMallocLarge2-6                39134             35891 ns/op           27496 B/op       1656 allocs/op
+Benchmark_LacMallocLarge2-6               115216             14820 ns/op            9135 B/op          0 allocs/op
+Benchmark_LacMallocLarge2Mt-6              62988             19065 ns/op               0 B/op          0 allocs/op
+
 ```
 
 - go test -bench . -tags=goexperiment.arenas -benchmem
@@ -107,19 +109,20 @@ goos: linux
 goarch: amd64
 pkg: oops/lib/linear_ac/lac
 cpu: Intel(R) Core(TM) i5-8500 CPU @ 3.00GHz
-BenchmarkNew-6                   2663191               459.9 ns/op           184 B/op          0 allocs/op
-BenchmarkNewFrom-6               2989390               473.0 ns/op           149 B/op          0 allocs/op
-Benchmark_RawMalloc-6           10412677               105.6 ns/op            88 B/op          5 allocs/op
-Benchmark_LacMalloc-6           14276998               114.6 ns/op           128 B/op          0 allocs/op
-Benchmark_RawMallocLarge2-6        26142             40217 ns/op           27496 B/op       1656 allocs/op
-Benchmark_LacMallocLarge2-6        50194             24815 ns/op           39590 B/op          0 allocs/op
-Benchmark_RawMallocSmall-6      10188718               178.4 ns/op            88 B/op          5 allocs/op
-Benchmark_LacMallocSmall-6      13542043                90.15 ns/op          128 B/op          0 allocs/op
-Benchmark_ArenaMallocSmall-6    12588194                94.69 ns/op           87 B/op          0 allocs/op
-Benchmark_RawMallocLarge-6         31762             35838 ns/op           27496 B/op       1656 allocs/op
-Benchmark_LacMallocLarge-6         50337             26381 ns/op           39582 B/op          0 allocs/op
-Benchmark_ArenaMallocLarge-6       36783             30900 ns/op           26634 B/op         45 allocs/op
-
+BenchmarkNew-6                             65473            118687 ns/op             166 B/op          0 allocs/op
+BenchmarkNewFrom-6                         65342            118379 ns/op             215 B/op          1 allocs/op
+Benchmark_RawMalloc-6                    9832786             122.7 ns/op              88 B/op          5 allocs/op
+Benchmark_LacMalloc-6                   16667865             69.94 ns/op               0 B/op          0 allocs/op
+Benchmark_LacMallocMt-6                 17386522             70.15 ns/op               0 B/op          0 allocs/op
+Benchmark_RawMallocLarge2-6                40267             35076 ns/op           27496 B/op       1656 allocs/op
+Benchmark_LacMallocLarge2-6               109783             14897 ns/op            8239 B/op          0 allocs/op
+Benchmark_LacMallocLarge2Mt-6              63415             18895 ns/op               0 B/op          0 allocs/op
+Benchmark_RawMallocSmall-6               9126696             128.5 ns/op              88 B/op          5 allocs/op
+Benchmark_LacMallocSmall-6              30242865             43.19 ns/op               0 B/op          0 allocs/op
+Benchmark_ArenaMallocSmall-6            12157006             160.3 ns/op              88 B/op          0 allocs/op
+Benchmark_RawMallocLarge-6                 43189             34958 ns/op           27496 B/op       1656 allocs/op
+Benchmark_LacMallocLarge-6                 93844             12481 ns/op           27267 B/op          0 allocs/op
+Benchmark_ArenaMallocLarge-6               35060             31891 ns/op           26637 B/op         45 allocs/op
 ```
 
 ### Windows
@@ -130,13 +133,14 @@ goos: windows
 goarch: amd64
 pkg: linear_ac/lac
 cpu: Intel(R) Core(TM) i7-10510U CPU @ 1.80GHz
-BenchmarkNew-8                   2388756               569.3 ns/op           197 B/op          0 allocs/op
-BenchmarkNewFrom-8               2584728               552.0 ns/op           138 B/op          0 allocs/op
-Benchmark_RawMalloc-8            9610574               125.9 ns/op            88 B/op          5 allocs/op
-Benchmark_LacMalloc-8           10282324               114.4 ns/op           128 B/op          0 allocs/op
-Benchmark_RawMallocLarge2-8        23122             47686 ns/op           27496 B/op       1656 allocs/op
-Benchmark_LacMallocLarge2-8        42115             27730 ns/op           39590 B/op          0 allocs/op
-
+BenchmarkNew-8                             46989            115594 ns/op             131 B/op          0 allocs/op
+BenchmarkNewFrom-8                         50430            127946 ns/op             190 B/op          1 allocs/op
+Benchmark_RawMalloc-8                    7590996             163.1 ns/op              88 B/op          5 allocs/op
+Benchmark_LacMalloc-8                   15614894             81.11 ns/op               0 B/op          0 allocs/op
+Benchmark_LacMallocMt-8                 12081428             90.54 ns/op               0 B/op          0 allocs/op
+Benchmark_RawMallocLarge2-8                32990             40105 ns/op           27496 B/op       1656 allocs/op
+Benchmark_LacMallocLarge2-8                79690             18879 ns/op            1028 B/op          0 allocs/op
+Benchmark_LacMallocLarge2Mt-8              44228             26353 ns/op               0 B/op          0 allocs/op
 ```
 - go test -bench . -tags='goexperiment.arenas' -benchmem
 ```
@@ -144,17 +148,19 @@ goos: windows
 goarch: amd64
 pkg: linear_ac/lac
 cpu: Intel(R) Core(TM) i7-10510U CPU @ 1.80GHz
-BenchmarkNew-8                   2632837               499.3 ns/op           186 B/op          0 allocs/op
-BenchmarkNewFrom-8               2989316               493.2 ns/op           149 B/op          0 allocs/op
-Benchmark_RawMalloc-8            9782223               123.4 ns/op            88 B/op          5 allocs/op
-Benchmark_LacMalloc-8           10231971               115.1 ns/op           128 B/op          0 allocs/op
-Benchmark_RawMallocLarge2-8        27981             37875 ns/op           27496 B/op       1656 allocs/op
-Benchmark_LacMallocLarge2-8        41592             29860 ns/op           39584 B/op          0 allocs/op
-Benchmark_RawMallocSmall-8       7730782               147.3 ns/op            88 B/op          5 allocs/op
-Benchmark_LacMallocSmall-8      12129996                92.38 ns/op          128 B/op          0 allocs/op
-Benchmark_ArenaMallocSmall-8     8912542               134.0 ns/op            88 B/op          0 allocs/op
-Benchmark_RawMallocLarge-8         33466             39580 ns/op           27496 B/op       1656 allocs/op
-Benchmark_LacMallocLarge-8         41583             27847 ns/op           39592 B/op          0 allocs/op
-Benchmark_ArenaMallocLarge-8       25872             49512 ns/op           26549 B/op         45 allocs/op
+BenchmarkNew-8                             46694            114681 ns/op             132 B/op          0 allocs/op
+BenchmarkNewFrom-8                         49684            122523 ns/op             192 B/op          1 allocs/op
+Benchmark_RawMalloc-8                    6185844             183.2 ns/op              88 B/op          5 allocs/op
+Benchmark_LacMalloc-8                   14673064             104.0 ns/op               0 B/op          0 allocs/op
+Benchmark_LacMallocMt-8                 10891394             99.24 ns/op               0 B/op          0 allocs/op
+Benchmark_RawMallocLarge2-8                25015             47155 ns/op           27496 B/op       1656 allocs/op
+Benchmark_LacMallocLarge2-8                75883             18138 ns/op               6 B/op          0 allocs/op
+Benchmark_LacMallocLarge2Mt-8              43879             26313 ns/op               0 B/op          0 allocs/op
+Benchmark_RawMallocSmall-8               7762598             158.6 ns/op              88 B/op          5 allocs/op
+Benchmark_LacMallocSmall-8              21674264             60.13 ns/op               0 B/op          0 allocs/op
+Benchmark_ArenaMallocSmall-8             6486002             179.4 ns/op              87 B/op          0 allocs/op
+Benchmark_RawMallocLarge-8                 24450             46036 ns/op           27496 B/op       1656 allocs/op
+Benchmark_LacMallocLarge-8                 62058             27365 ns/op           27265 B/op          0 allocs/op
+Benchmark_ArenaMallocLarge-8               10000            169460 ns/op           26978 B/op         45 allocs/op
 
 ```
